@@ -14,6 +14,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.util.List;
 
 /**
@@ -31,6 +32,7 @@ public class DataSyncService {
     private final SpaceLaunchNowService apiService;
     private final LaunchRepository launchRepository;
     private final AgencyRepository agencyRepository;
+    private final ImageCacheService imageCacheService;
 
     /** アプリが完全に起動したタイミングで初回同期を実行 */
     @EventListener(ApplicationReadyEvent.class)
@@ -51,6 +53,8 @@ public class DataSyncService {
         syncUpcomingLaunches();
         syncPreviousLaunches();
         syncAgencies();
+        cacheImages();
+        cleanupOldLaunches();
         log.info("Data sync completed.");
     }
 
@@ -140,6 +144,37 @@ public class DataSyncService {
 
         launch.setImageUrl(r.getImage());
         return launch;
+    }
+
+    /** 未キャッシュの画像をローカルに保存し imageUrl を更新する */
+    private void cacheImages() {
+        try {
+            List<Launch> uncached = launchRepository.findAll().stream()
+                .filter(l -> !imageCacheService.isCached(l.getImageUrl()))
+                .toList();
+            if (uncached.isEmpty()) return;
+
+            log.info("Caching {} launch images...", uncached.size());
+            for (Launch launch : uncached) {
+                String localUrl = imageCacheService.cache(launch.getId(), launch.getImageUrl());
+                launch.setImageUrl(localUrl);
+            }
+            launchRepository.saveAll(uncached);
+            log.info("Image cache complete.");
+        } catch (Exception e) {
+            log.error("Image caching failed: {}", e.getMessage());
+        }
+    }
+
+    /** 2ヶ月以上前の過去打ち上げを削除する */
+    private void cleanupOldLaunches() {
+        try {
+            String cutoff = LocalDate.now().minusMonths(2) + "T00:00:00Z";
+            launchRepository.deleteOldPreviousLaunches(cutoff);
+            log.info("Cleaned up previous launches older than 2 months.");
+        } catch (Exception e) {
+            log.error("Cleanup failed: {}", e.getMessage());
+        }
     }
 
     private Agency mapToAgency(AgencyApiResponse.AgencyResult r) {

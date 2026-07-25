@@ -30,7 +30,7 @@ public class Agency {
     private String type;
 
     /** ISO 国コード (例: "USA", "JPN") */
-    @Column(name = "country_code", length = 20)
+    @Column(name = "country_code", length = 255)
     private String countryCode;
 
     /** 機関の説明文 */
