@@ -1,0 +1,248 @@
+/* =====================
+   リセット & ベース
+   ===================== */
+*, *::before, *::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background-color: #080d16;
+  color: #dce8f5;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  min-height: 100vh;
+  line-height: 1.5;
+}
+
+/* =====================
+   レイアウト
+   ===================== */
+.app {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 16px 48px;
+}
+
+/* =====================
+   ヘッダー
+   ===================== */
+.header {
+  background: linear-gradient(160deg, #0b1a3b 0%, #1a2a6c 50%, #0b1a3b 100%);
+  border-bottom: 1px solid rgba(100, 160, 255, 0.2);
+  padding: 40px 24px 32px;
+  text-align: center;
+  margin: 0 -16px 28px;
+}
+
+.header h1 {
+  font-size: clamp(1.8rem, 4vw, 2.6rem);
+  font-weight: 800;
+  color: #7ab8ff;
+  letter-spacing: 0.02em;
+  margin-bottom: 6px;
+}
+
+.header p {
+  color: #7a93b0;
+  font-size: 0.95rem;
+}
+
+/* =====================
+   ナビゲーション
+   ===================== */
+.nav {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 28px;
+  flex-wrap: wrap;
+}
+
+.nav-btn {
+  padding: 9px 22px;
+  border: 1px solid rgba(100, 160, 255, 0.25);
+  border-radius: 24px;
+  background: transparent;
+  color: #7a93b0;
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: background 0.2s, border-color 0.2s, color 0.2s;
+}
+
+.nav-btn:hover {
+  border-color: #7ab8ff;
+  color: #7ab8ff;
+  background: rgba(100, 160, 255, 0.06);
+}
+
+.nav-btn.active {
+  border-color: #7ab8ff;
+  color: #7ab8ff;
+  background: rgba(100, 160, 255, 0.12);
+}
+
+/* =====================
+   状態メッセージ
+   ===================== */
+.state-msg {
+  text-align: center;
+  padding: 56px 16px;
+  color: #7a93b0;
+  font-size: 1rem;
+}
+
+.state-msg.error {
+  color: #e06060;
+}
+
+/* =====================
+   グリッド
+   ===================== */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 20px;
+}
+
+/* =====================
+   カード
+   ===================== */
+.card {
+  background: #0d1829;
+  border: 1px solid rgba(100, 160, 255, 0.12);
+  border-radius: 14px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card:hover {
+  transform: translateY(-5px);
+  border-color: rgba(100, 160, 255, 0.35);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+/* 打ち上げカード画像 */
+.card-image {
+  width: 100%;
+  height: 180px;
+  object-fit: cover;
+  display: block;
+}
+
+/* 機関ロゴ */
+.agency-logo-wrapper {
+  background: #131f35;
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100px;
+  border-bottom: 1px solid rgba(100, 160, 255, 0.08);
+}
+
+.agency-logo {
+  max-height: 72px;
+  max-width: 100%;
+  object-fit: contain;
+  filter: brightness(1.1);
+}
+
+/* カード本文 */
+.card-body {
+  padding: 16px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.card-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #dce8f5;
+  line-height: 1.4;
+  flex: 1;
+}
+
+/* メタ情報リスト */
+.card-meta {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 0.82rem;
+  color: #6a88a8;
+}
+
+/* 説明文 */
+.card-desc {
+  font-size: 0.8rem;
+  color: #556a80;
+  line-height: 1.55;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  margin-top: auto;
+}
+
+/* =====================
+   バッジ
+   ===================== */
+.badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.badge-success {
+  background: rgba(60, 180, 80, 0.18);
+  color: #72d98a;
+  border: 1px solid rgba(60, 180, 80, 0.3);
+}
+
+.badge-danger {
+  background: rgba(220, 80, 80, 0.18);
+  color: #e88080;
+  border: 1px solid rgba(220, 80, 80, 0.3);
+}
+
+.badge-warning {
+  background: rgba(220, 160, 40, 0.18);
+  color: #e8c060;
+  border: 1px solid rgba(220, 160, 40, 0.3);
+}
+
+.badge-default {
+  background: rgba(100, 160, 255, 0.1);
+  color: #7ab8ff;
+  border: 1px solid rgba(100, 160, 255, 0.2);
+}
+
+/* =====================
+   レスポンシブ
+   ===================== */
+@media (max-width: 480px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .nav-btn {
+    font-size: 0.8rem;
+    padding: 8px 16px;
+  }
+}
