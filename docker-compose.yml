@@ -24,18 +24,22 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:-your_password}
       APPLE_CALENDAR_USERNAME: ${APPLE_CALENDAR_USERNAME:-}
       APPLE_CALENDAR_PASSWORD: ${APPLE_CALENDAR_PASSWORD:-}
+      SPACE_API_BASE_URL: ${SPACE_API_BASE_URL:-https://ll.thespacedevs.com/2.2.0}
     depends_on:
       db:
         condition: service_healthy
     ports:
-      - "8080:8080"
+      - "0.0.0.0:8080:8080"
+    volumes:
+      - image_cache:/root/.space-app/images
 
   frontend:
     build: ./frontend
     depends_on:
       - backend
     ports:
-      - "3000:80"
+      - "0.0.0.0:3000:80"
 
 volumes:
   db_data:
+  image_cache:
