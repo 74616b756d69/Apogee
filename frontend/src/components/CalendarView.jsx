@@ -50,6 +50,7 @@ function CalendarView({ isActive }) {
 
   const [calEvents, setCalEvents]     = useState([])
   const [loadingEvents, setLoadingEvents] = useState(false)
+  const [eventsError, setEventsError] = useState(false)
 
   const [showSheet, setShowSheet]     = useState(false)
   const [form, setForm]               = useState({ title: '', startTime: '', endTime: '', allDay: true })
@@ -80,7 +81,18 @@ function CalendarView({ isActive }) {
     return map
   }, [launches])
 
-  const todayKey  = useMemo(() => toJstDateKey(new Date().toISOString()), [])
+  const [todayKey, setTodayKey] = useState(() => toJstDateKey(new Date().toISOString()))
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setTodayKey(prev => {
+        const next = toJstDateKey(new Date().toISOString())
+        return next === prev ? prev : next
+      })
+    }, 60 * 1000)
+    return () => clearInterval(id)
+  }, [])
+
   const activeKey = selectedKey ?? (nearestLaunch ? toJstDateKey(nearestLaunch.net) : todayKey)
   const selectedLaunches = launchesByDate[activeKey] ?? []
 
@@ -90,6 +102,7 @@ function CalendarView({ isActive }) {
 
     // キャッシュ済みなら即座に表示し（楽観的更新）、裏で最新データを取りに行く
     const cached = eventsCacheRef.current[activeKey]
+    setEventsError(false)
     if (cached) {
       setCalEvents(cached)
       setLoadingEvents(false)
@@ -111,6 +124,7 @@ function CalendarView({ isActive }) {
         if (activeKeyRef.current === activeKey) {
           if (!cached) setCalEvents([])
           setLoadingEvents(false)
+          setEventsError(true)
         }
       })
   }, [activeKey])
@@ -285,7 +299,11 @@ function CalendarView({ isActive }) {
           <LaunchLoader />
         )}
 
-        {!loadingEvents && calEvents.length === 0 && selectedLaunches.length === 0 && (
+        {!loadingEvents && eventsError && (
+          <div className="state-msg error">カレンダーの取得に失敗しました</div>
+        )}
+
+        {!loadingEvents && !eventsError && calEvents.length === 0 && selectedLaunches.length === 0 && (
           <div className="state-msg">この日の予定はありません</div>
         )}
 

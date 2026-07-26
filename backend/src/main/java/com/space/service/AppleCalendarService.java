@@ -103,7 +103,7 @@ public class AppleCalendarService {
 
         } catch (Exception e) {
             log.error("Apple Calendar fetch failed: {}", e.getMessage());
-            return Collections.emptyList();
+            throw new RuntimeException("Apple Calendar fetch failed: " + e.getMessage(), e);
         }
     }
 
@@ -261,8 +261,9 @@ public class AppleCalendarService {
     }
 
     private List<CalendarEventDto> queryToday(CloseableHttpClient client, String collectionUrl, LocalDate today) throws Exception {
-        String start = today.atStartOfDay(ZoneId.of("UTC")).format(DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'"));
-        String end   = today.plusDays(1).atStartOfDay(ZoneId.of("UTC")).format(DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'"));
+        DateTimeFormatter utcFmt = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'");
+        String start = today.atStartOfDay(JST).withZoneSameInstant(ZoneId.of("UTC")).format(utcFmt);
+        String end   = today.plusDays(1).atStartOfDay(JST).withZoneSameInstant(ZoneId.of("UTC")).format(utcFmt);
 
         String body = String.format("""
             <?xml version="1.0" encoding="utf-8"?>
@@ -387,6 +388,11 @@ public class AppleCalendarService {
     private Document parseXml(String xml) throws Exception {
         DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
         factory.setNamespaceAware(true);
+        factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+        factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+        factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+        factory.setXIncludeAware(false);
+        factory.setExpandEntityReferences(false);
         return factory.newDocumentBuilder().parse(new InputSource(new StringReader(xml)));
     }
 

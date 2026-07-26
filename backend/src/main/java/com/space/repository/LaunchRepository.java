@@ -16,9 +16,13 @@ public interface LaunchRepository extends JpaRepository<Launch, String> {
     List<Launch> findByUpcomingTrueOrderByNetAsc();
     List<Launch> findByUpcomingFalseOrderByNetDesc();
 
-    /** 2ヶ月以上前の過去打ち上げを削除 */
+    /**
+     * 2ヶ月以上前の過去打ち上げを削除。
+     * net は文字列カラムのため、API のフォーマット差異（ミリ秒有無など）に影響されないよう
+     * 日付部分（先頭10文字 = yyyy-MM-dd）だけを取り出して比較する。
+     */
     @Modifying
     @Transactional
-    @Query("DELETE FROM Launch l WHERE l.upcoming = false AND l.net < :cutoff")
+    @Query("DELETE FROM Launch l WHERE l.upcoming = false AND SUBSTRING(l.net, 1, 10) < SUBSTRING(:cutoff, 1, 10)")
     void deleteOldPreviousLaunches(@Param("cutoff") String cutoff);
 }

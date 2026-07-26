@@ -31,15 +31,25 @@ public class CalendarController {
 
     @GetMapping("/today")
     public List<CalendarEventDto> getToday() {
-        return calendarService.getTodayEvents();
+        try {
+            return calendarService.getTodayEvents();
+        } catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Apple Calendar fetch failed");
+        }
     }
 
     @GetMapping("/date")
     public List<CalendarEventDto> getByDate(@RequestParam String date) {
+        LocalDate parsed;
         try {
-            return calendarService.getEventsForDate(LocalDate.parse(date));
+            parsed = LocalDate.parse(date);
         } catch (Exception e) {
-            return List.of();
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid date: " + date);
+        }
+        try {
+            return calendarService.getEventsForDate(parsed);
+        } catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Apple Calendar fetch failed");
         }
     }
 

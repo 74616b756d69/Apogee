@@ -66,6 +66,10 @@ function toLaunchDateParam(dateStr) {
   return jst.toISOString().slice(0, 10)
 }
 
+function todayDateKey() {
+  return toLaunchDateParam(new Date().toISOString())
+}
+
 function CountUnit({ n, label, gold }) {
   return (
     <div className="countdown-unit">
@@ -115,6 +119,8 @@ function TodayView({ onColorDetected }) {
 
   const selectedLaunch = launches[selectedIdx] ?? null
   const heroUrl        = selectedLaunch?.imageUrl ?? null
+  const launchDateKey  = toLaunchDateParam(selectedLaunch?.net)
+  const isLaunchToday  = launchDateKey === todayDateKey()
 
   // ロケット情報を取得
   useEffect(() => {
@@ -151,17 +157,16 @@ function TodayView({ onColorDetected }) {
     return () => document.removeEventListener('visibilitychange', onVisible)
   }, [])
 
-  // カレンダー取得: デフォルト=今日、カード選択時=打ち上げ日
+  // カレンダー取得: 選択中の打ち上げが今日なら今日のカレンダー、それ以外は打ち上げ日のカレンダー
   useEffect(() => {
     setCalLoading(true)
-    const dateParam = selectedIdx === 0 ? null : toLaunchDateParam(selectedLaunch?.net)
-    const url = dateParam ? `/api/calendar/date?date=${dateParam}` : '/api/calendar/today'
+    const url = isLaunchToday ? '/api/calendar/today' : `/api/calendar/date?date=${launchDateKey}`
     fetch(url)
       .then(r => r.ok ? r.json() : Promise.reject())
       .then(json => setCalEvents(json))
       .catch(() => setCalEvents([]))
       .finally(() => setCalLoading(false))
-  }, [selectedIdx, selectedLaunch?.net])
+  }, [isLaunchToday, launchDateKey])
 
   const handleLoad = () => {
     const color = extractDominantColor(imgRef.current)
@@ -220,9 +225,9 @@ function TodayView({ onColorDetected }) {
 
         {/* Phase 2: 打ち上げ日 + Appleカレンダー */}
         <div className={`hero-today hero-phase${isToday ? ' hero-phase--enter' : ''}`}>
-          <p className="hero-eyebrow">{selectedIdx === 0 ? 'TODAY' : 'LAUNCH DAY'}</p>
+          <p className="hero-eyebrow">{isLaunchToday ? 'TODAY' : 'LAUNCH DAY'}</p>
           <h1 className="hero-today-date">
-            {selectedIdx === 0 ? formatDateFull(null) : formatDateFull(selectedLaunch?.net)}
+            {formatDateFull(isLaunchToday ? null : selectedLaunch?.net)}
           </h1>
           {calLoading ? (
             <LaunchLoader size="small" label="" />
