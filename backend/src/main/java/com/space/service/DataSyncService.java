@@ -40,8 +40,8 @@ public class DataSyncService {
         syncAll();
     }
 
-    /** 6時間ごとに自動同期 (毎日 0/6/12/18 時に実行) */
-    @Scheduled(cron = "0 0 */6 * * *")
+    /** 1時間ごとに自動同期 */
+    @Scheduled(cron = "0 0 * * * *")
     public void scheduledSync() {
         log.info("Scheduled sync triggered.");
         syncAll();
