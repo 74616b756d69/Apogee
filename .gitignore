@@ -25,3 +25,9 @@ replay_pid*
 
 # 環境変数ファイル（認証情報を含む）
 .env
+
+# Maven ビルド出力
+target/
+
+# Node
+node_modules/

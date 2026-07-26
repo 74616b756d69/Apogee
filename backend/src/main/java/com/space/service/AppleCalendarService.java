@@ -1,5 +1,6 @@
 package com.space.service;
 
+import com.space.dto.CalendarEventCreateDto;
 import com.space.dto.CalendarEventDto;
 import lombok.extern.slf4j.Slf4j;
 import net.fortuna.ical4j.data.CalendarBuilder;
@@ -28,6 +29,7 @@ import java.io.StringReader;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
@@ -79,6 +81,72 @@ public class AppleCalendarService {
         } catch (Exception e) {
             log.error("Apple Calendar fetch failed: {}", e.getMessage());
             return Collections.emptyList();
+        }
+    }
+
+    public void createEvent(CalendarEventCreateDto dto) throws Exception {
+        if (username.isBlank() || password.isBlank()) {
+            throw new Exception("Apple Calendar credentials not configured");
+        }
+
+        LocalDate date   = LocalDate.parse(dto.getDate());
+        boolean   allDay = dto.getStartTime() == null || dto.getStartTime().isBlank();
+
+        String uid      = UUID.randomUUID().toString();
+        String dtstamp  = ZonedDateTime.now(ZoneId.of("UTC"))
+                .format(DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'"));
+
+        StringBuilder ics = new StringBuilder();
+        ics.append("BEGIN:VCALENDAR\r\n")
+           .append("VERSION:2.0\r\n")
+           .append("PRODID:-//SpaceApp//EN\r\n")
+           .append("BEGIN:VEVENT\r\n")
+           .append("UID:").append(uid).append("\r\n")
+           .append("DTSTAMP:").append(dtstamp).append("\r\n");
+
+        if (allDay) {
+            String d   = date.format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+            String end = date.plusDays(1).format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+            ics.append("DTSTART;VALUE=DATE:").append(d).append("\r\n")
+               .append("DTEND;VALUE=DATE:").append(end).append("\r\n");
+        } else {
+            DateTimeFormatter icalFmt = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss");
+            LocalTime start = LocalTime.parse(dto.getStartTime());
+            LocalTime end   = (dto.getEndTime() != null && !dto.getEndTime().isBlank())
+                    ? LocalTime.parse(dto.getEndTime())
+                    : start.plusHours(1);
+            ics.append("DTSTART;TZID=Asia/Tokyo:")
+               .append(ZonedDateTime.of(date, start, JST).format(icalFmt)).append("\r\n")
+               .append("DTEND;TZID=Asia/Tokyo:")
+               .append(ZonedDateTime.of(date, end, JST).format(icalFmt)).append("\r\n");
+        }
+
+        ics.append("SUMMARY:").append(dto.getTitle()).append("\r\n")
+           .append("END:VEVENT\r\n")
+           .append("END:VCALENDAR\r\n");
+
+        try (CloseableHttpClient client = buildHttpClient()) {
+            List<String> collections = getCachedCollections(client);
+            if (collections.isEmpty()) throw new Exception("No calendar collections found");
+
+            String col = collections.get(0);
+            if (!col.endsWith("/")) col += "/";
+            String eventUrl = col + uid + ".ics";
+
+            HttpUriRequestBase req = new HttpUriRequestBase("PUT", URI.create(eventUrl));
+            req.setHeader("Authorization", basicAuth());
+            req.setHeader("Content-Type", "text/calendar; charset=utf-8");
+            req.setEntity(new StringEntity(ics.toString(),
+                    ContentType.create("text/calendar", StandardCharsets.UTF_8)));
+
+            client.execute(req, resp -> {
+                int status = resp.getCode();
+                EntityUtils.consume(resp.getEntity());
+                if (status < 200 || status >= 300) {
+                    throw new RuntimeException("CalDAV PUT failed: " + status);
+                }
+                return null;
+            });
         }
     }
 

@@ -733,6 +733,175 @@ body {
 }
 
 /* =====================
+   Apple Calendar イベント行
+   ===================== */
+.cal-event-thumb {
+  background: rgba(var(--accent), 0.12);
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cal-event-icon {
+  color: rgba(var(--accent), 0.9);
+  font-size: 10px;
+  line-height: 1;
+}
+
+.cal-event-loading {
+  font-size: 0.8rem;
+  color: #6a88a8;
+  padding: 6px 0;
+}
+
+.cal-agenda-spacer {
+  height: 88px;
+}
+
+/* =====================
+   FAB（予定追加ボタン）
+   ===================== */
+.cal-fab {
+  position: fixed;
+  bottom: calc(52px + env(safe-area-inset-bottom));
+  right: 22px;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: rgba(var(--accent), 1);
+  border: none;
+  color: #04101f;
+  font-size: 1.7rem;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 18px rgba(var(--accent), 0.45);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.cal-fab:active {
+  transform: scale(0.91);
+  box-shadow: 0 2px 8px rgba(var(--accent), 0.3);
+}
+
+/* =====================
+   追加シート
+   ===================== */
+.cal-sheet-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  z-index: 80;
+  display: flex;
+  align-items: flex-end;
+}
+
+.cal-sheet {
+  width: 100%;
+  background: #0d1829;
+  border-radius: 20px 20px 0 0;
+  padding: 12px 20px calc(32px + env(safe-area-inset-bottom));
+  border-top: 1px solid rgba(100, 160, 255, 0.2);
+}
+
+.cal-sheet-handle {
+  width: 36px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.16);
+  border-radius: 2px;
+  margin: 0 auto 16px;
+}
+
+.cal-sheet-date {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: rgba(var(--accent), 0.8);
+  margin-bottom: 14px;
+}
+
+.cal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cal-input {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(100, 160, 255, 0.2);
+  border-radius: 10px;
+  padding: 12px 14px;
+  color: #dce8f5;
+  font-size: 0.95rem;
+  font-family: inherit;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.cal-input:focus {
+  border-color: rgba(var(--accent), 0.6);
+}
+
+.cal-input::placeholder {
+  color: #4a6480;
+}
+
+.cal-input--time {
+  padding: 10px 12px;
+  color-scheme: dark;
+}
+
+.cal-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #7a93b0;
+  font-size: 0.9rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.cal-time-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cal-time-sep {
+  color: #6a88a8;
+  flex-shrink: 0;
+}
+
+.cal-error {
+  font-size: 0.8rem;
+  color: #e08080;
+}
+
+.cal-submit-btn {
+  padding: 13px;
+  border-radius: 12px;
+  background: rgba(var(--accent), 1);
+  border: none;
+  color: #04101f;
+  font-size: 0.95rem;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+  margin-top: 2px;
+}
+
+.cal-submit-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* =====================
    打ち上げ日時
    ===================== */
 .calendar-launch-date {
@@ -1175,4 +1344,83 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* =====================
+   カレンダー: NEXT LAUNCH カード
+   ===================== */
+.cal-next-launch {
+  position: relative;
+  height: 130px;
+  background: #0b1422;
+  overflow: hidden;
+  border-bottom: 1px solid rgba(100, 160, 255, 0.08);
+  flex-shrink: 0;
+}
+
+.cal-next-launch-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.40;
+}
+
+.cal-next-launch-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    105deg,
+    rgba(6, 9, 19, 0.15) 0%,
+    rgba(6, 9, 19, 0.55) 45%,
+    rgba(6, 9, 19, 0.90) 100%
+  );
+}
+
+.cal-next-launch-body {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 20px;
+}
+
+.cal-next-launch-label {
+  font-size: 0.56rem;
+  font-weight: 800;
+  letter-spacing: 0.20em;
+  color: rgba(var(--accent), 0.9);
+  margin-bottom: 5px;
+}
+
+.cal-next-launch-name {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 5px;
+  line-height: 1.3;
+}
+
+.cal-next-launch-meta {
+  font-size: 0.70rem;
+  color: rgba(255, 255, 255, 0.55);
+  margin-top: 1px;
+}
+
+/* =====================
+   カレンダー: 打ち上げ行の画像サムネイル
+   ===================== */
+.launch-thumb--img {
+  padding: 0;
+  overflow: hidden;
+  background: #0e1a2e;
+}
+
+.launch-row-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }

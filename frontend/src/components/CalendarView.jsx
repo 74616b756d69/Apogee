@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土']
 
@@ -30,7 +30,6 @@ function formatLaunchDate(dateStr) {
   if (!dateStr) return ''
   try {
     return new Date(dateStr).toLocaleString('ja-JP', {
-      year: 'numeric',
       month: 'long',
       day: 'numeric',
       weekday: 'short',
@@ -43,48 +42,28 @@ function formatLaunchDate(dateStr) {
   }
 }
 
-function calcCountdown(dateStr) {
-  if (!dateStr) return null
-  const diff = new Date(dateStr).getTime() - Date.now()
-  if (diff <= 0) return null
-  const total = Math.floor(diff / 1000)
-  return {
-    days:    Math.floor(total / 86400),
-    hours:   Math.floor((total % 86400) / 3600),
-    minutes: Math.floor((total % 3600) / 60),
-    seconds: total % 60,
-  }
-}
-
-function CalendarView() {
+function CalendarView({ isActive }) {
   const [launches, setLaunches]       = useState([])
-  const [loading, setLoading]         = useState(true)
-  const [error, setError]             = useState(null)
   const [viewDate, setViewDate]       = useState(() => new Date())
   const [selectedKey, setSelectedKey] = useState(null)
-  const [countdown, setCountdown]     = useState(null)
+
+  const [calEvents, setCalEvents]     = useState([])
+
+  const [showSheet, setShowSheet]     = useState(false)
+  const [form, setForm]               = useState({ title: '', startTime: '', endTime: '', allDay: true })
+  const [submitting, setSubmitting]   = useState(false)
+  const [submitError, setSubmitError] = useState(null)
+
+  const titleRef = useRef(null)
 
   useEffect(() => {
-    setLoading(true)
-    setError(null)
     fetch('/api/launches/upcoming')
-      .then(res => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        return res.json()
-      })
+      .then(res => res.ok ? res.json() : Promise.reject())
       .then(json => setLaunches(json))
-      .catch(err => setError(`データの取得に失敗しました: ${err.message}`))
-      .finally(() => setLoading(false))
+      .catch(() => {})
   }, [])
 
   const nearestLaunch = launches[0] ?? null
-
-  useEffect(() => {
-    if (!nearestLaunch?.net) { setCountdown(null); return }
-    setCountdown(calcCountdown(nearestLaunch.net))
-    const id = setInterval(() => setCountdown(calcCountdown(nearestLaunch.net)), 1000)
-    return () => clearInterval(id)
-  }, [nearestLaunch?.net])
 
   const launchesByDate = useMemo(() => {
     const map = {}
@@ -97,14 +76,22 @@ function CalendarView() {
     return map
   }, [launches])
 
-  const todayKey = useMemo(() => toJstDateKey(new Date().toISOString()), [])
+  const todayKey  = useMemo(() => toJstDateKey(new Date().toISOString()), [])
   const activeKey = selectedKey ?? (nearestLaunch ? toJstDateKey(nearestLaunch.net) : todayKey)
   const selectedLaunches = launchesByDate[activeKey] ?? []
 
-  const year = viewDate.getFullYear()
-  const month = viewDate.getMonth()
-  const firstWeekday = new Date(year, month, 1).getDay()
-  const daysInMonth = new Date(year, month + 1, 0).getDate()
+  useEffect(() => {
+    if (!activeKey) return
+    fetch(`/api/calendar/date?date=${activeKey}`)
+      .then(res => res.ok ? res.json() : Promise.reject())
+      .then(json => setCalEvents(json))
+      .catch(() => setCalEvents([]))
+  }, [activeKey])
+
+  const year            = viewDate.getFullYear()
+  const month           = viewDate.getMonth()
+  const firstWeekday    = new Date(year, month, 1).getDay()
+  const daysInMonth     = new Date(year, month + 1, 0).getDate()
   const daysInPrevMonth = new Date(year, month, 0).getDate()
 
   const cells = []
@@ -118,62 +105,54 @@ function CalendarView() {
     cells.push({ day: cells.length - (firstWeekday + daysInMonth) + 1, faint: true, key: null })
   }
 
-  const changeMonth = delta => {
-    setViewDate(new Date(year, month + delta, 1))
+  const changeMonth = delta => setViewDate(new Date(year, month + delta, 1))
+
+  const openSheet = () => {
+    setForm({ title: '', startTime: '', endTime: '', allDay: true })
+    setSubmitError(null)
+    setShowSheet(true)
+    setTimeout(() => titleRef.current?.focus(), 50)
   }
 
-  const heroStyle = nearestLaunch?.imageUrl
-    ? { backgroundImage: `url(${nearestLaunch.imageUrl})` }
-    : undefined
+  const closeSheet = () => setShowSheet(false)
+
+  const refreshCalEvents = () => {
+    if (!activeKey) return
+    fetch(`/api/calendar/date?date=${activeKey}`)
+      .then(res => res.ok ? res.json() : Promise.reject())
+      .then(json => setCalEvents(json))
+      .catch(() => {})
+  }
+
+  const submitEvent = async () => {
+    if (!form.title.trim()) return
+    setSubmitting(true)
+    setSubmitError(null)
+    try {
+      const res = await fetch('/api/calendar/event', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title:     form.title.trim(),
+          date:      activeKey,
+          startTime: form.allDay ? null : (form.startTime || null),
+          endTime:   form.allDay ? null : (form.endTime   || null),
+        }),
+      })
+      if (!res.ok) throw new Error()
+      closeSheet()
+      refreshCalEvents()
+    } catch {
+      setSubmitError('追加に失敗しました')
+    } finally {
+      setSubmitting(false)
+    }
+  }
 
   return (
     <div className="calendar-view">
-      <div className={`calendar-hero ${nearestLaunch?.imageUrl ? '' : 'calendar-hero-fallback'}`} style={heroStyle}>
-        <div className="calendar-hero-scrim" />
-        <div className="calendar-hero-info">
-          {loading && <div className="calendar-eyebrow">読み込み中…</div>}
-          {!loading && nearestLaunch && (
-            <>
-              <div className="calendar-eyebrow">NEXT LAUNCH</div>
-              <h2 className="calendar-hero-title">{nearestLaunch.name}</h2>
-              {nearestLaunch.net && (
-                <div className="calendar-launch-date">{formatLaunchDate(nearestLaunch.net)}</div>
-              )}
-              {nearestLaunch.locationName && (
-                <div className="calendar-hero-sub">{nearestLaunch.locationName}</div>
-              )}
 
-              <div className="countdown-label-t">T − MINUS</div>
-              {countdown ? (
-                <div className="countdown">
-                  <div className="countdown-unit">
-                    <span className="countdown-num">{String(countdown.days).padStart(2, '0')}</span>
-                    <span className="countdown-lbl">DAYS</span>
-                  </div>
-                  <span className="countdown-sep">:</span>
-                  <div className="countdown-unit">
-                    <span className="countdown-num">{String(countdown.hours).padStart(2, '0')}</span>
-                    <span className="countdown-lbl">HOURS</span>
-                  </div>
-                  <span className="countdown-sep">:</span>
-                  <div className="countdown-unit">
-                    <span className="countdown-num">{String(countdown.minutes).padStart(2, '0')}</span>
-                    <span className="countdown-lbl">MINS</span>
-                  </div>
-                  <span className="countdown-sep">:</span>
-                  <div className="countdown-unit">
-                    <span className="countdown-num countdown-num--sec">{String(countdown.seconds).padStart(2, '0')}</span>
-                    <span className="countdown-lbl">SECS</span>
-                  </div>
-                </div>
-              ) : (
-                <div className="countdown-launched">発射済み / 日時未定</div>
-              )}
-            </>
-          )}
-        </div>
-      </div>
-
+      {/* 月グリッド */}
       <div className="calendar-panel">
         <div className="cal-header">
           <div className="cal-month">
@@ -182,18 +161,16 @@ function CalendarView() {
           </div>
           <div className="cal-nav">
             <button onClick={() => changeMonth(-1)} aria-label="前の月">‹</button>
-            <button onClick={() => changeMonth(1)} aria-label="次の月">›</button>
+            <button onClick={() => changeMonth(1)}  aria-label="次の月">›</button>
           </div>
         </div>
-
         <div className="weekdays">
           {WEEKDAYS.map(w => <div key={w}>{w}</div>)}
         </div>
-
         <div className="cal-grid">
           {cells.map((cell, i) => {
-            const hasLaunch = cell.key && launchesByDate[cell.key]?.length > 0
-            const isToday = cell.key === todayKey
+            const hasLaunch  = cell.key && launchesByDate[cell.key]?.length > 0
+            const isToday    = cell.key === todayKey
             const isSelected = cell.key === activeKey
             return (
               <button
@@ -210,19 +187,50 @@ function CalendarView() {
         </div>
       </div>
 
+      {/* 直近の打ち上げカード */}
+      {nearestLaunch && (
+        <div className="cal-next-launch">
+          {nearestLaunch.imageUrl && (
+            <img src={nearestLaunch.imageUrl} alt="" className="cal-next-launch-img" />
+          )}
+          <div className="cal-next-launch-overlay" />
+          <div className="cal-next-launch-body">
+            <p className="cal-next-launch-label">NEXT LAUNCH</p>
+            <p className="cal-next-launch-name">{nearestLaunch.name}</p>
+            <p className="cal-next-launch-meta">{formatLaunchDate(nearestLaunch.net)}</p>
+            {nearestLaunch.locationName && (
+              <p className="cal-next-launch-meta">{nearestLaunch.locationName}</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* アジェンダ */}
       <div className="calendar-agenda">
-        <div className="section-label">{activeKey ?? ''} の打ち上げ予定</div>
+        <div className="section-label">{activeKey ?? ''} の予定</div>
 
-        {loading && <div className="state-msg">⏳ 読み込み中...</div>}
-        {error && <div className="state-msg error">{error}</div>}
+        {/* Apple Calendar イベント */}
+        {calEvents.map(e => (
+          <div className="launch-row" key={e.uid}>
+            <div className="launch-thumb cal-event-thumb">
+              <span className="cal-event-icon">●</span>
+            </div>
+            <div className="launch-info">
+              <b>{e.title}</b>
+              <span>{e.allDay ? '終日' : e.startTime}</span>
+            </div>
+          </div>
+        ))}
 
-        {!loading && !error && selectedLaunches.length === 0 && (
-          <div className="state-msg">この日の打ち上げ予定はありません</div>
-        )}
-
+        {/* 打ち上げイベント */}
         {selectedLaunches.map(launch => (
           <div className="launch-row" key={launch.id}>
-            <div className="launch-thumb">🚀</div>
+            <div className="launch-thumb launch-thumb--img">
+              {launch.imageUrl
+                ? <img src={launch.imageUrl} alt="" className="launch-row-img" onError={e => { e.target.style.display = 'none' }} />
+                : <span>🚀</span>
+              }
+            </div>
             <div className="launch-info">
               <b>{launch.name}</b>
               <span>{[formatTime(launch.net), launch.locationName].filter(Boolean).join(' · ')}</span>
@@ -230,7 +238,74 @@ function CalendarView() {
             {launch.statusName && <span className="badge badge-default">{launch.statusName}</span>}
           </div>
         ))}
+
+        {calEvents.length === 0 && selectedLaunches.length === 0 && (
+          <div className="state-msg">この日の予定はありません</div>
+        )}
+
+        <div className="cal-agenda-spacer" />
       </div>
+
+      {/* FAB */}
+      {isActive && (
+        <button className="cal-fab" onClick={openSheet} aria-label="予定を追加">+</button>
+      )}
+
+      {/* 追加シート */}
+      {isActive && showSheet && (
+        <div
+          className="cal-sheet-overlay"
+          onClick={e => { if (e.target === e.currentTarget) closeSheet() }}
+        >
+          <div className="cal-sheet">
+            <div className="cal-sheet-handle" />
+            <p className="cal-sheet-date">{activeKey}</p>
+            <div className="cal-form">
+              <input
+                ref={titleRef}
+                className="cal-input"
+                placeholder="タイトル"
+                value={form.title}
+                onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+                onKeyDown={e => e.key === 'Enter' && submitEvent()}
+              />
+              <label className="cal-checkbox-row">
+                <input
+                  type="checkbox"
+                  checked={form.allDay}
+                  onChange={e => setForm(f => ({ ...f, allDay: e.target.checked }))}
+                />
+                終日
+              </label>
+              {!form.allDay && (
+                <div className="cal-time-row">
+                  <input
+                    className="cal-input cal-input--time"
+                    type="time"
+                    value={form.startTime}
+                    onChange={e => setForm(f => ({ ...f, startTime: e.target.value }))}
+                  />
+                  <span className="cal-time-sep">〜</span>
+                  <input
+                    className="cal-input cal-input--time"
+                    type="time"
+                    value={form.endTime}
+                    onChange={e => setForm(f => ({ ...f, endTime: e.target.value }))}
+                  />
+                </div>
+              )}
+              {submitError && <p className="cal-error">{submitError}</p>}
+              <button
+                className="cal-submit-btn"
+                onClick={submitEvent}
+                disabled={submitting || !form.title.trim()}
+              >
+                {submitting ? '追加中...' : '追加'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
