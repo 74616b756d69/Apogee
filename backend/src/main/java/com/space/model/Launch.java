@@ -67,6 +67,10 @@ public class Launch {
     @Column(name = "image_url", columnDefinition = "TEXT")
     private String imageUrl;
 
+    /** ウェブキャスト URL (YouTube 等) */
+    @Column(name = "webcast_url", columnDefinition = "TEXT")
+    private String webcastUrl;
+
     /** true=予定, false=過去 */
     @Column(name = "is_upcoming")
     private boolean upcoming;

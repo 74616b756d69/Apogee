@@ -2,11 +2,15 @@ import { useState, useEffect, useRef } from 'react'
 import TodayView from './components/TodayView'
 import CalendarView from './components/CalendarView'
 import PreviousLaunchesView from './components/PreviousLaunchesView'
+import AgencyView from './components/AgencyView'
+import StatsView from './components/StatsView'
 
 const PAGES = [
   { id: 'today',    endpoint: null },
   { id: 'calendar', endpoint: null },
   { id: 'previous', endpoint: '/api/launches/previous' },
+  { id: 'agencies', endpoint: null },
+  { id: 'stats',    endpoint: null },
 ]
 
 function App() {
@@ -73,6 +77,16 @@ function App() {
               error={pageError[2]}
             />
           </div>
+        </div>
+
+        {/* 宇宙機関 */}
+        <div className="page">
+          <AgencyView />
+        </div>
+
+        {/* 統計 */}
+        <div className="page">
+          <StatsView />
         </div>
       </div>
 

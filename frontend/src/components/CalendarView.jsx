@@ -43,14 +43,21 @@ function formatLaunchDate(dateStr) {
   }
 }
 
+function formatAgendaDate(key) {
+  if (!key) return ''
+  const [y, m, d] = key.split('-').map(Number)
+  const date = new Date(Date.UTC(y, m - 1, d))
+  const weekday = ['日', '月', '火', '水', '木', '金', '土'][date.getUTCDay()]
+  return `${m}月${d}日（${weekday}）`
+}
+
 function CalendarView({ isActive }) {
   const [launches, setLaunches]       = useState([])
   const [viewDate, setViewDate]       = useState(() => new Date())
   const [selectedKey, setSelectedKey] = useState(null)
 
-  const [calEvents, setCalEvents]     = useState([])
+  const [calEvents, setCalEvents]         = useState([])
   const [loadingEvents, setLoadingEvents] = useState(false)
-  const [eventsError, setEventsError] = useState(false)
 
   const [showSheet, setShowSheet]     = useState(false)
   const [form, setForm]               = useState({ title: '', startTime: '', endTime: '', allDay: true })
@@ -58,8 +65,8 @@ function CalendarView({ isActive }) {
   const [submitError, setSubmitError] = useState(null)
 
   const titleRef       = useRef(null)
-  const activeKeyRef    = useRef(null)
-  const eventsCacheRef  = useRef({})
+  const activeKeyRef   = useRef(null)
+  const eventsCacheRef = useRef({})
 
   useEffect(() => {
     fetch('/api/launches/upcoming')
@@ -81,18 +88,7 @@ function CalendarView({ isActive }) {
     return map
   }, [launches])
 
-  const [todayKey, setTodayKey] = useState(() => toJstDateKey(new Date().toISOString()))
-
-  useEffect(() => {
-    const id = setInterval(() => {
-      setTodayKey(prev => {
-        const next = toJstDateKey(new Date().toISOString())
-        return next === prev ? prev : next
-      })
-    }, 60 * 1000)
-    return () => clearInterval(id)
-  }, [])
-
+  const todayKey  = useMemo(() => toJstDateKey(new Date().toISOString()), [])
   const activeKey = selectedKey ?? (nearestLaunch ? toJstDateKey(nearestLaunch.net) : todayKey)
   const selectedLaunches = launchesByDate[activeKey] ?? []
 
@@ -100,9 +96,7 @@ function CalendarView({ isActive }) {
     activeKeyRef.current = activeKey
     if (!activeKey) return
 
-    // キャッシュ済みなら即座に表示し（楽観的更新）、裏で最新データを取りに行く
     const cached = eventsCacheRef.current[activeKey]
-    setEventsError(false)
     if (cached) {
       setCalEvents(cached)
       setLoadingEvents(false)
@@ -124,7 +118,6 @@ function CalendarView({ isActive }) {
         if (activeKeyRef.current === activeKey) {
           if (!cached) setCalEvents([])
           setLoadingEvents(false)
-          setEventsError(true)
         }
       })
   }, [activeKey])
@@ -134,6 +127,11 @@ function CalendarView({ isActive }) {
   const firstWeekday    = new Date(year, month, 1).getDay()
   const daysInMonth     = new Date(year, month + 1, 0).getDate()
   const daysInPrevMonth = new Date(year, month, 0).getDate()
+
+  const todayDate          = useMemo(() => new Date(), [])
+  const todayYear          = todayDate.getFullYear()
+  const todayMonth         = todayDate.getMonth()
+  const isViewingOtherMonth = year !== todayYear || month !== todayMonth
 
   const cells = []
   for (let i = firstWeekday - 1; i >= 0; i--) {
@@ -186,11 +184,10 @@ function CalendarView({ isActive }) {
           title:     optimisticEvent.title,
           date:      activeKey,
           startTime: optimisticEvent.startTime,
-          endTime:   form.allDay ? null : (form.endTime   || null),
+          endTime:   form.allDay ? null : (form.endTime || null),
         }),
       })
       if (!res.ok) throw new Error()
-      // 実際のレスポンスを待たず、その場で予定を反映（後で refreshCalEvents が本物のデータと入れ替える）
       setCalEvents(prev => {
         const next = [...prev, optimisticEvent]
         eventsCacheRef.current[activeKey] = next
@@ -205,6 +202,8 @@ function CalendarView({ isActive }) {
     }
   }
 
+  const totalEvents = calEvents.length + selectedLaunches.length
+
   return (
     <div className="calendar-view">
 
@@ -212,10 +211,18 @@ function CalendarView({ isActive }) {
       <div className="calendar-panel">
         <div className="cal-header">
           <div className="cal-month">
-            <span>{year} {String(month + 1).padStart(2, '0')}</span>
+            <span>{year}</span>
             {month + 1}月
           </div>
           <div className="cal-nav">
+            {isViewingOtherMonth && (
+              <button
+                className="cal-today-btn"
+                onClick={() => { setViewDate(new Date()); setSelectedKey(null) }}
+              >
+                今日
+              </button>
+            )}
             <button onClick={() => changeMonth(-1)} aria-label="前の月">‹</button>
             <button onClick={() => changeMonth(1)}  aria-label="次の月">›</button>
           </div>
@@ -225,7 +232,8 @@ function CalendarView({ isActive }) {
         </div>
         <div className="cal-grid">
           {cells.map((cell, i) => {
-            const hasLaunch  = cell.key && launchesByDate[cell.key]?.length > 0
+            const launchList = cell.key ? (launchesByDate[cell.key] || []) : []
+            const hasLaunch  = launchList.length > 0
             const isToday    = cell.key === todayKey
             const isSelected = cell.key === activeKey
             return (
@@ -235,8 +243,16 @@ function CalendarView({ isActive }) {
                 disabled={cell.faint}
                 onClick={() => cell.key && setSelectedKey(cell.key)}
               >
-                <span className="num">{cell.day}</span>
-                {hasLaunch && <span className="launch-dot" />}
+                <span className="cal-day-circle">
+                  <span className="num">{cell.day}</span>
+                </span>
+                {hasLaunch && (
+                  <span className="launch-dot-row">
+                    {launchList.slice(0, 3).map((_, idx) => (
+                      <span key={idx} className="launch-dot" />
+                    ))}
+                  </span>
+                )}
               </button>
             )
           })}
@@ -263,11 +279,17 @@ function CalendarView({ isActive }) {
 
       {/* アジェンダ */}
       <div className="calendar-agenda">
-        <div className="section-label">{activeKey ?? ''} の予定</div>
+        <div className="cal-agenda-header">
+          <p className="cal-agenda-date">{formatAgendaDate(activeKey)}</p>
+          {totalEvents > 0 && (
+            <span className="cal-agenda-count">{totalEvents}件</span>
+          )}
+        </div>
 
         {/* Apple Calendar イベント */}
         {calEvents.map(e => (
-          <div className="launch-row" key={e.uid}>
+          <div className="launch-row cal-row--event" key={e.uid}>
+            <span className="cal-row-bar cal-row-bar--apple" />
             <div className="launch-thumb cal-event-thumb">
               <span className="cal-event-icon">●</span>
             </div>
@@ -280,7 +302,8 @@ function CalendarView({ isActive }) {
 
         {/* 打ち上げイベント */}
         {selectedLaunches.map(launch => (
-          <div className="launch-row" key={launch.id}>
+          <div className="launch-row cal-row--event" key={launch.id}>
+            <span className="cal-row-bar cal-row-bar--launch" />
             <div className="launch-thumb launch-thumb--img">
               {launch.imageUrl
                 ? <img src={launch.imageUrl} alt="" className="launch-row-img" onError={e => { e.target.style.display = 'none' }} />
@@ -299,11 +322,7 @@ function CalendarView({ isActive }) {
           <LaunchLoader />
         )}
 
-        {!loadingEvents && eventsError && (
-          <div className="state-msg error">カレンダーの取得に失敗しました</div>
-        )}
-
-        {!loadingEvents && !eventsError && calEvents.length === 0 && selectedLaunches.length === 0 && (
+        {!loadingEvents && totalEvents === 0 && (
           <div className="state-msg">この日の予定はありません</div>
         )}
 
@@ -323,7 +342,7 @@ function CalendarView({ isActive }) {
         >
           <div className="cal-sheet">
             <div className="cal-sheet-handle" />
-            <p className="cal-sheet-date">{activeKey}</p>
+            <p className="cal-sheet-date">{formatAgendaDate(activeKey)}</p>
             <div className="cal-form">
               <input
                 ref={titleRef}

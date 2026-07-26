@@ -143,6 +143,11 @@ public class DataSyncService {
         }
 
         launch.setImageUrl(r.getImage());
+
+        if (r.getVidUrls() != null && !r.getVidUrls().isEmpty()) {
+            launch.setWebcastUrl(r.getVidUrls().get(0).getUrl());
+        }
+
         return launch;
     }
 

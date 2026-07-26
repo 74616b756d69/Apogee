@@ -59,6 +59,20 @@ public class LaunchApiResponse {
         /** 打ち上げ画像 URL (null の場合あり) */
         @JsonProperty("image")
         private String image;
+
+        /** ウェブキャスト URL 一覧 */
+        @JsonProperty("vid_urls")
+        private List<VidUrlDto> vidUrls;
+    }
+
+    @Data
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class VidUrlDto {
+        @JsonProperty("url")
+        private String url;
+
+        @JsonProperty("title")
+        private String title;
     }
 
     // =========================================================

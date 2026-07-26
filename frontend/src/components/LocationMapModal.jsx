@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import LaunchLoader from './LaunchLoader'
 
-/** ISO 8601 文字列を日本時間の読みやすい形式に変換 */
 function formatDate(dateStr) {
   if (!dateStr) return null
   try {
@@ -18,7 +17,6 @@ function formatDate(dateStr) {
   }
 }
 
-/** ISO 8601 文字列を日本時間の日付のみに変換（ニュース記事用） */
 function formatNewsDate(dateStr) {
   if (!dateStr) return null
   try {
@@ -30,7 +28,6 @@ function formatNewsDate(dateStr) {
   }
 }
 
-/** 打ち上げに関連するニュース記事一覧（Spaceflight News API 経由） */
 function NewsSection({ launchId }) {
   const [articles, setArticles] = useState(null)
 
@@ -44,46 +41,50 @@ function NewsSection({ launchId }) {
     return () => { cancelled = true }
   }, [launchId])
 
+  if (articles === null) return (
+    <div className="map-modal-news">
+      <p className="map-modal-news-label">関連ニュース</p>
+      <LaunchLoader size="small" label="" />
+    </div>
+  )
+
+  if (articles.length === 0) return (
+    <div className="map-modal-news">
+      <p className="map-modal-news-label">関連ニュース</p>
+      <p className="map-modal-news-empty">関連ニュースはまだありません</p>
+    </div>
+  )
+
   return (
     <div className="map-modal-news">
       <p className="map-modal-news-label">関連ニュース</p>
-      {articles === null ? (
-        <LaunchLoader size="small" label="" />
-      ) : articles.length === 0 ? (
-        <p className="map-modal-news-empty">関連ニュースはまだありません</p>
-      ) : (
-        <ul className="map-modal-news-list">
-          {articles.map(a => (
-            <li key={a.id}>
-              <a className="map-modal-news-item" href={a.url} target="_blank" rel="noreferrer">
-                {a.imageUrl && <img src={a.imageUrl} alt="" className="map-modal-news-thumb" />}
-                <div className="map-modal-news-body">
-                  <p className="map-modal-news-title">{a.title}</p>
-                  <p className="map-modal-news-meta">
-                    {[a.newsSite, formatNewsDate(a.publishedAt)].filter(Boolean).join(' · ')}
-                  </p>
-                </div>
-              </a>
-            </li>
-          ))}
-        </ul>
-      )}
+      <ul className="map-modal-news-list">
+        {articles.map(a => (
+          <li key={a.id}>
+            <a className="map-modal-news-item" href={a.url} target="_blank" rel="noreferrer">
+              {a.imageUrl && <img src={a.imageUrl} alt="" className="map-modal-news-thumb" />}
+              <div className="map-modal-news-body">
+                <p className="map-modal-news-title">{a.title}</p>
+                <p className="map-modal-news-meta">
+                  {[a.newsSite, formatNewsDate(a.publishedAt)].filter(Boolean).join(' · ')}
+                </p>
+              </div>
+            </a>
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }
 
-/**
- * 打ち上げの詳細情報・場所・関連ニュースを表示するモーダル
- */
 function LocationMapModal({ launch, onClose }) {
-  const { id, padName, locationName, padLatitude, padLongitude, rocketName, missionType, statusName, net, missionDescription } = launch
+  const { id, padName, locationName, padLatitude, padLongitude,
+          rocketName, missionType, statusName, net, missionDescription, webcastUrl } = launch
 
   const hasCoords = padLatitude != null && padLongitude != null
   const mapSrc = hasCoords
     ? `https://www.google.com/maps?q=${padLatitude},${padLongitude}&z=15&output=embed`
     : `https://www.google.com/maps?q=${encodeURIComponent(padName || locationName)}&output=embed`
-
-  const formattedDate = formatDate(net)
 
   return (
     <div className="map-modal-overlay" onClick={onClose}>
@@ -94,17 +95,36 @@ function LocationMapModal({ launch, onClose }) {
         </div>
 
         <div className="map-modal-scroll">
+          {/* ウェブキャストボタン */}
+          {webcastUrl && (
+            <div className="map-modal-webcast">
+              <a
+                className="webcast-btn"
+                href={webcastUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <span className="webcast-btn-icon">▶</span>
+                ライブ配信・アーカイブを見る
+              </a>
+            </div>
+          )}
+
+          {/* メタ情報 */}
           <ul className="map-modal-meta">
-            {formattedDate      && <li>📅 {formattedDate}</li>}
-            {rocketName         && <li>🚀 {rocketName}</li>}
-            {missionType        && <li>🎯 {missionType}</li>}
-            {statusName         && <li>🛰️ {statusName}</li>}
-            {locationName && locationName !== padName && <li>📍 {locationName}</li>}
+            {formatDate(net)                                 && <li>📅 {formatDate(net)}</li>}
+            {rocketName                                      && <li>🚀 {rocketName}</li>}
+            {missionType                                     && <li>🎯 {missionType}</li>}
+            {statusName                                      && <li>🛰️ {statusName}</li>}
+            {locationName && locationName !== padName        && <li>📍 {locationName}</li>}
           </ul>
 
           {missionDescription && (
             <p className="map-modal-desc">{missionDescription}</p>
           )}
+
+          {/* 関連ニュース（地図の前に配置して見つけやすく） */}
+          {id && <NewsSection launchId={id} />}
 
           <iframe
             className="map-modal-frame"
@@ -113,8 +133,6 @@ function LocationMapModal({ launch, onClose }) {
             loading="lazy"
             referrerPolicy="no-referrer-when-downgrade"
           />
-
-          {id && <NewsSection launchId={id} />}
         </div>
       </div>
     </div>
