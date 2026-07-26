@@ -48,13 +48,16 @@ function CalendarView({ isActive }) {
   const [selectedKey, setSelectedKey] = useState(null)
 
   const [calEvents, setCalEvents]     = useState([])
+  const [loadingEvents, setLoadingEvents] = useState(false)
 
   const [showSheet, setShowSheet]     = useState(false)
   const [form, setForm]               = useState({ title: '', startTime: '', endTime: '', allDay: true })
   const [submitting, setSubmitting]   = useState(false)
   const [submitError, setSubmitError] = useState(null)
 
-  const titleRef = useRef(null)
+  const titleRef       = useRef(null)
+  const activeKeyRef    = useRef(null)
+  const eventsCacheRef  = useRef({})
 
   useEffect(() => {
     fetch('/api/launches/upcoming')
@@ -81,11 +84,34 @@ function CalendarView({ isActive }) {
   const selectedLaunches = launchesByDate[activeKey] ?? []
 
   useEffect(() => {
+    activeKeyRef.current = activeKey
     if (!activeKey) return
+
+    // キャッシュ済みなら即座に表示し（楽観的更新）、裏で最新データを取りに行く
+    const cached = eventsCacheRef.current[activeKey]
+    if (cached) {
+      setCalEvents(cached)
+      setLoadingEvents(false)
+    } else {
+      setCalEvents([])
+      setLoadingEvents(true)
+    }
+
     fetch(`/api/calendar/date?date=${activeKey}`)
       .then(res => res.ok ? res.json() : Promise.reject())
-      .then(json => setCalEvents(json))
-      .catch(() => setCalEvents([]))
+      .then(json => {
+        eventsCacheRef.current[activeKey] = json
+        if (activeKeyRef.current === activeKey) {
+          setCalEvents(json)
+          setLoadingEvents(false)
+        }
+      })
+      .catch(() => {
+        if (activeKeyRef.current === activeKey) {
+          if (!cached) setCalEvents([])
+          setLoadingEvents(false)
+        }
+      })
   }, [activeKey])
 
   const year            = viewDate.getFullYear()
@@ -120,7 +146,10 @@ function CalendarView({ isActive }) {
     if (!activeKey) return
     fetch(`/api/calendar/date?date=${activeKey}`)
       .then(res => res.ok ? res.json() : Promise.reject())
-      .then(json => setCalEvents(json))
+      .then(json => {
+        eventsCacheRef.current[activeKey] = json
+        if (activeKeyRef.current === activeKey) setCalEvents(json)
+      })
       .catch(() => {})
   }
 
@@ -128,18 +157,30 @@ function CalendarView({ isActive }) {
     if (!form.title.trim()) return
     setSubmitting(true)
     setSubmitError(null)
+    const optimisticEvent = {
+      uid:       `optimistic-${Date.now()}`,
+      title:     form.title.trim(),
+      startTime: form.allDay ? null : (form.startTime || null),
+      allDay:    form.allDay,
+    }
     try {
       const res = await fetch('/api/calendar/event', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          title:     form.title.trim(),
+          title:     optimisticEvent.title,
           date:      activeKey,
-          startTime: form.allDay ? null : (form.startTime || null),
+          startTime: optimisticEvent.startTime,
           endTime:   form.allDay ? null : (form.endTime   || null),
         }),
       })
       if (!res.ok) throw new Error()
+      // 実際のレスポンスを待たず、その場で予定を反映（後で refreshCalEvents が本物のデータと入れ替える）
+      setCalEvents(prev => {
+        const next = [...prev, optimisticEvent]
+        eventsCacheRef.current[activeKey] = next
+        return next
+      })
       closeSheet()
       refreshCalEvents()
     } catch {
@@ -239,7 +280,11 @@ function CalendarView({ isActive }) {
           </div>
         ))}
 
-        {calEvents.length === 0 && selectedLaunches.length === 0 && (
+        {loadingEvents && calEvents.length === 0 && (
+          <div className="state-msg">読み込み中...</div>
+        )}
+
+        {!loadingEvents && calEvents.length === 0 && selectedLaunches.length === 0 && (
           <div className="state-msg">この日の予定はありません</div>
         )}
 

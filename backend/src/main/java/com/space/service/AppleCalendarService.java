@@ -34,6 +34,8 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 @Service
@@ -54,6 +56,11 @@ public class AppleCalendarService {
     private volatile List<String> cachedCollections;
     private volatile long collectionsCachedAt = 0L;
 
+    // 日付ごとのイベント一覧も短時間キャッシュする（iCloud CalDAV への往復は遅いため）
+    private static final long EVENTS_TTL_MS = 60 * 1000; // 1分
+    private record CachedEvents(List<CalendarEventDto> events, long cachedAt) {}
+    private final Map<LocalDate, CachedEvents> eventsCache = new ConcurrentHashMap<>();
+
     public List<CalendarEventDto> getTodayEvents() {
         return getEventsForDate(LocalDate.now(JST));
     }
@@ -63,19 +70,35 @@ public class AppleCalendarService {
             log.info("Apple Calendar credentials not configured — skipping CalDAV fetch.");
             return Collections.emptyList();
         }
+
+        CachedEvents cached = eventsCache.get(date);
+        if (cached != null && (System.currentTimeMillis() - cached.cachedAt()) < EVENTS_TTL_MS) {
+            return cached.events();
+        }
+
         try (CloseableHttpClient client = buildHttpClient()) {
             List<String> collections = getCachedCollections(client);
             if (collections.isEmpty()) return List.of();
 
             // UID をキーに重複排除（複数コレクションに同一イベントが存在する場合がある）
-            Map<String, CalendarEventDto> eventMap = new LinkedHashMap<>();
-            for (String col : collections) {
-                for (CalendarEventDto e : queryToday(client, col, date)) {
-                    eventMap.putIfAbsent(e.getUid(), e);
-                }
-            }
+            // コレクションごとの REPORT リクエストは直列だと遅いので並列に実行する
+            Map<String, CalendarEventDto> eventMap = new ConcurrentHashMap<>();
+            List<CompletableFuture<Void>> futures = collections.stream()
+                .map(col -> CompletableFuture.runAsync(() -> {
+                    try {
+                        for (CalendarEventDto e : queryToday(client, col, date)) {
+                            eventMap.putIfAbsent(e.getUid(), e);
+                        }
+                    } catch (Exception ex) {
+                        log.warn("CalDAV query failed for collection {}: {}", col, ex.getMessage());
+                    }
+                }))
+                .toList();
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+
             List<CalendarEventDto> events = new ArrayList<>(eventMap.values());
             events.sort(Comparator.comparing(e -> e.getStartTime() == null ? "" : e.getStartTime()));
+            eventsCache.put(date, new CachedEvents(events, System.currentTimeMillis()));
             return events;
 
         } catch (Exception e) {
@@ -148,6 +171,9 @@ public class AppleCalendarService {
                 return null;
             });
         }
+
+        // その日のキャッシュを無効化し、次回取得時に今作成したイベントを反映させる
+        eventsCache.remove(date);
     }
 
     // ── コレクション探索（キャッシュ付き） ───────────────
