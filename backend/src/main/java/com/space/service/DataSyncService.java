@@ -12,7 +12,6 @@ import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -41,14 +40,13 @@ public class DataSyncService {
         syncAll();
     }
 
-    /** 6時間ごとに自動同期 (毎日 0/6/12/18 時に実行) */
-    @Scheduled(cron = "0 0 */6 * * *")
+    /** 1時間ごとに自動同期 */
+    @Scheduled(cron = "0 0 * * * *")
     public void scheduledSync() {
         log.info("Scheduled sync triggered.");
         syncAll();
     }
 
-    @Transactional
     public void syncAll() {
         syncUpcomingLaunches();
         syncPreviousLaunches();
@@ -137,12 +135,19 @@ public class DataSyncService {
 
         if (r.getPad() != null) {
             launch.setPadName(r.getPad().getName());
+            launch.setPadLatitude(r.getPad().getLatitude());
+            launch.setPadLongitude(r.getPad().getLongitude());
             if (r.getPad().getLocation() != null) {
                 launch.setLocationName(r.getPad().getLocation().getName());
             }
         }
 
         launch.setImageUrl(r.getImage());
+
+        if (r.getVidUrls() != null && !r.getVidUrls().isEmpty()) {
+            launch.setWebcastUrl(r.getVidUrls().get(0).getUrl());
+        }
+
         return launch;
     }
 

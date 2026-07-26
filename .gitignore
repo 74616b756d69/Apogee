@@ -31,3 +31,4 @@ target/
 
 # Node
 node_modules/
+frontend/dist/

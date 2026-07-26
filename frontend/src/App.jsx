@@ -1,13 +1,18 @@
 import { useState, useEffect, useRef } from 'react'
-import LaunchCard from './components/LaunchCard'
 import TodayView from './components/TodayView'
 import CalendarView from './components/CalendarView'
+import PreviousLaunchesView from './components/PreviousLaunchesView'
+import AgencyView from './components/AgencyView'
+import StatsView from './components/StatsView'
+
+const POMO_DURATIONS = { work: 25 * 60, short: 5 * 60, long: 15 * 60 }
 
 const PAGES = [
   { id: 'today',    endpoint: null },
   { id: 'calendar', endpoint: null },
-  { id: 'upcoming', endpoint: '/api/launches/upcoming' },
   { id: 'previous', endpoint: '/api/launches/previous' },
+  { id: 'agencies', endpoint: null },
+  { id: 'stats',    endpoint: null },
 ]
 
 function App() {
@@ -16,7 +21,27 @@ function App() {
   const [pageError,   setPageError]   = useState({})
   const [currentPage, setCurrentPage] = useState(0)
   const [accentColor, setAccentColor] = useState(null)
+  const [pomo, setPomo] = useState({ mode: 'work', secs: 25 * 60, running: false, count: 0 })
   const scrollRef = useRef(null)
+
+  useEffect(() => {
+    if (!pomo.running) return
+    const id = setInterval(() => {
+      setPomo(prev => {
+        if (prev.secs > 0) return { ...prev, secs: prev.secs - 1 }
+        let nextMode, nextCount
+        if (prev.mode === 'work') {
+          nextCount = prev.count + 1
+          nextMode  = nextCount % 4 === 0 ? 'long' : 'short'
+        } else {
+          nextMode  = 'work'
+          nextCount = prev.count
+        }
+        return { mode: nextMode, secs: POMO_DURATIONS[nextMode], running: false, count: nextCount }
+      })
+    }, 1000)
+    return () => clearInterval(id)
+  }, [pomo.running])
 
   useEffect(() => {
     PAGES.forEach((page, i) => {
@@ -57,44 +82,33 @@ function App() {
       <div className="pages" ref={scrollRef}>
         {/* 今日 */}
         <div className="page">
-          <TodayView onColorDetected={setAccentColor} />
+          <TodayView onColorDetected={setAccentColor} pomo={pomo} setPomo={setPomo} />
         </div>
 
         {/* カレンダー */}
         <div className="page">
-          <CalendarView isActive={currentPage === 1} />
-        </div>
-
-        {/* 打ち上げ予定 */}
-        <div className="page">
-          <div className="page-content">
-            {pageLoading[2] && <div className="state-msg">⏳ 読み込み中...</div>}
-            {pageError[2]   && <div className="state-msg error">データの取得に失敗しました: {pageError[2]}</div>}
-            {!pageLoading[2] && !pageError[2] && !pageData[2]?.length && (
-              <div className="state-msg">データがありません</div>
-            )}
-            {pageData[2]?.length > 0 && !pageLoading[2] && !pageError[2] && (
-              <div className="grid">
-                {pageData[2].map(l => <LaunchCard key={l.id} launch={l} />)}
-              </div>
-            )}
-          </div>
+          <CalendarView isActive={currentPage === 1} pomo={pomo} setPomo={setPomo} />
         </div>
 
         {/* 過去の打ち上げ */}
         <div className="page">
           <div className="page-content">
-            {pageLoading[3] && <div className="state-msg">⏳ 読み込み中...</div>}
-            {pageError[3]   && <div className="state-msg error">データの取得に失敗しました: {pageError[3]}</div>}
-            {!pageLoading[3] && !pageError[3] && !pageData[3]?.length && (
-              <div className="state-msg">データがありません</div>
-            )}
-            {pageData[3]?.length > 0 && !pageLoading[3] && !pageError[3] && (
-              <div className="grid">
-                {pageData[3].map(l => <LaunchCard key={l.id} launch={l} />)}
-              </div>
-            )}
+            <PreviousLaunchesView
+              launches={pageData[2]}
+              loading={pageLoading[2]}
+              error={pageError[2]}
+            />
           </div>
+        </div>
+
+        {/* 宇宙機関 */}
+        <div className="page">
+          <AgencyView />
+        </div>
+
+        {/* 統計 */}
+        <div className="page">
+          <StatsView />
         </div>
       </div>
 
