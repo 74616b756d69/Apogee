@@ -993,6 +993,49 @@ body {
   color: #6a88a8;
 }
 
+/* =====================
+   過去の打ち上げタイムライン
+   ===================== */
+.timeline {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 8px 0 40px;
+}
+
+.timeline-group {
+  margin-bottom: 8px;
+}
+
+.timeline-date {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 10px 4px 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: rgba(var(--accent), 0.9);
+  background: #080d16;
+}
+
+.timeline-row {
+  width: 100%;
+  border: none;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  border-radius: 10px;
+  padding-left: 4px;
+  padding-right: 4px;
+  transition: background 0.15s ease;
+}
+
+.timeline-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
 @media (max-width: 480px) {
   .cal-day .num {
     font-size: 0.7rem;
