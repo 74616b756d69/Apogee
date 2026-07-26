@@ -744,6 +744,355 @@ body {
    ===================== */
 .calendar-view {
   min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* TodayView PC アナログタイマーウィジェット (右下) */
+.today-pc-widget { display: none; }
+
+@media (min-width: 768px) {
+  .today-pc-widget {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    position: absolute;
+    bottom: 28px;
+    right: 28px;
+    width: 176px;
+    padding: 14px 14px 12px;
+    z-index: 10;
+  }
+
+  /* 時計 */
+  .today-pc-clock {
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+  }
+
+  .today-pc-time {
+    font-family: 'SF Mono', 'Consolas', 'Monaco', ui-monospace, monospace;
+    font-size: 1.45rem;
+    font-weight: 200;
+    color: rgba(255, 255, 255, 0.90);
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+  }
+
+  .today-pc-tz {
+    font-size: 0.56rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    color: rgba(255, 255, 255, 0.30);
+  }
+
+  /* SVGアナログタイマー */
+  .pomo-dial {
+    width: 148px;
+    height: 148px;
+  }
+
+  /* アナログタイマー SVG */
+  .pomo-bg-circle { fill: rgba(255,255,255,0.04); }
+
+  .pomo-sector--work  { fill: rgba(var(--accent), 0.50); }
+  .pomo-sector--short { fill: rgba(var(--accent), 0.32); }
+  .pomo-sector--long  { fill: rgba(var(--accent), 0.22); }
+
+  .pomo-mode-lbl { fill: rgba(255,255,255,0.40); }
+  .pomo-mode-lbl--work  { fill: rgba(var(--accent), 0.90); }
+  .pomo-mode-lbl--short { fill: rgba(var(--accent), 0.70); }
+  .pomo-mode-lbl--long  { fill: rgba(var(--accent), 0.55); }
+
+  /* セッションドット */
+  .today-pomo-dots {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+}
+
+/* カウントダウン・ポモドーロはモバイル非表示、PC専用 */
+.cal-pc-countdown    { display: none; }
+.cal-webcast-link    { display: none; }
+.cal-next-launch-info { /* mobile: no extra styles */ }
+
+/* ポモドーロタイマー (モバイルは非表示) */
+.cal-pomo { display: none; }
+
+/* モバイル: グリッドを上、情報を下 */
+.cal-left  { order: 2; display: flex; flex-direction: column; }
+.cal-right { order: 1; }
+
+/* =====================
+   PC: ミッションコントロールレイアウト
+   ===================== */
+@media (min-width: 768px) {
+  .calendar-view {
+    flex-direction: row;
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+  }
+
+  /* 左パネル: ミッションコントロール */
+  .cal-left {
+    order: 1;
+    width: 340px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-right: 1px solid rgba(100, 160, 255, 0.08);
+    background: #04080f;
+  }
+
+  /* 右パネル: カレンダーグリッド */
+  .cal-right {
+    order: 2;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 56px;
+    overflow-y: auto;
+    background: rgba(8, 14, 26, 0.6);
+  }
+
+  /* 左: ヒーローが残り高さを全部占める */
+  .cal-left .cal-next-launch {
+    flex: 1;
+    height: auto;
+  }
+
+  .cal-left .cal-next-launch-img {
+    opacity: 0.50;
+  }
+
+  /* 上が透明→下が真っ暗のグラデーション */
+  .cal-left .cal-next-launch-overlay {
+    background: linear-gradient(
+      180deg,
+      rgba(4, 8, 16, 0.05) 0%,
+      rgba(4, 8, 16, 0.40) 38%,
+      rgba(4, 8, 16, 0.90) 68%,
+      rgba(4, 8, 16, 0.98) 100%
+    );
+  }
+
+  /* コンテンツを下揃え */
+  .cal-left .cal-next-launch-body {
+    justify-content: flex-end;
+    padding: 0 22px 20px;
+    gap: 0;
+  }
+
+  /* カウントダウン表示 (PC のみ) */
+  .cal-pc-countdown {
+    display: block;
+    margin-bottom: 18px;
+  }
+
+  .cal-countdown-label {
+    font-size: 0.58rem;
+    font-weight: 900;
+    letter-spacing: 0.24em;
+    color: rgba(var(--accent), 0.75);
+    margin-bottom: 10px;
+  }
+
+  /* 左パネル内のカウントダウンはSP版より小さめに (340pxに収まるサイズ) */
+  .cal-pc-countdown .countdown-unit {
+    min-width: 46px;
+  }
+
+  .cal-pc-countdown .countdown-num {
+    font-size: 2.0rem;
+  }
+
+  .cal-pc-countdown .countdown-num--sec {
+    font-size: 2.0rem;
+  }
+
+  .cal-pc-countdown .countdown-sep {
+    font-size: 1.6rem;
+  }
+
+  /* 打ち上げ詳細: 上にボーダー区切り */
+  .cal-next-launch-info {
+    border-top: 1px solid rgba(255, 255, 255, 0.10);
+    padding-top: 14px;
+  }
+
+  .cal-left .cal-next-launch-name {
+    font-size: 0.98rem;
+    line-height: 1.45;
+  }
+
+  /* ライブ配信リンク */
+  .cal-webcast-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    margin-top: 14px;
+    padding: 7px 14px;
+    background: rgba(var(--accent), 0.10);
+    border: 1px solid rgba(var(--accent), 0.30);
+    border-radius: 6px;
+    color: rgba(var(--accent), 0.95);
+    font-size: 0.74rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-decoration: none;
+    transition: background 0.15s;
+  }
+
+  .cal-webcast-link:hover {
+    background: rgba(var(--accent), 0.22);
+  }
+
+  /* ポモドーロタイマー */
+  .cal-pomo {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 10px 22px 11px;
+    background: rgba(6, 11, 20, 0.97);
+    border-top: 1px solid rgba(100, 160, 255, 0.08);
+    flex-shrink: 0;
+  }
+
+  .cal-pomo-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .cal-pomo-mode {
+    font-size: 0.56rem;
+    font-weight: 900;
+    letter-spacing: 0.20em;
+    color: rgba(var(--accent), 0.80);
+  }
+
+  .cal-pomo-mode--short,
+  .cal-pomo-mode--long {
+    color: #7adf9a;
+  }
+
+  .cal-pomo-dots {
+    display: flex;
+    gap: 5px;
+    align-items: center;
+  }
+
+  .cal-pomo-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    transition: background 0.2s;
+  }
+
+  .cal-pomo-dot.done {
+    background: rgba(var(--accent), 0.85);
+    border-color: transparent;
+  }
+
+  .cal-pomo-body {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .cal-pomo-time {
+    font-family: 'SF Mono', 'Consolas', 'Monaco', ui-monospace, monospace;
+    font-size: 1.85rem;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+  }
+
+  .cal-pomo-btns {
+    display: flex;
+    gap: 6px;
+  }
+
+  .cal-pomo-btn {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: 1px solid rgba(100, 160, 255, 0.22);
+    background: rgba(255, 255, 255, 0.04);
+    color: #b0c8e0;
+    font-size: 0.82rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s, border-color 0.15s;
+  }
+
+  .cal-pomo-btn:hover {
+    border-color: rgba(var(--accent), 0.45);
+    background: rgba(var(--accent), 0.08);
+  }
+
+  .cal-pomo-btn--main {
+    background: rgba(var(--accent), 0.14);
+    border-color: rgba(var(--accent), 0.40);
+    color: rgba(var(--accent), 1);
+  }
+
+  .cal-pomo-btn--main:hover {
+    background: rgba(var(--accent), 0.24);
+  }
+
+  /* 左: アジェンダ — 固定高さ、スクロール可能 */
+  .cal-left .calendar-agenda {
+    flex: none;
+    height: 190px;
+    overflow-y: auto;
+    border-top: 1px solid rgba(100, 160, 255, 0.10);
+    background: rgba(4, 8, 16, 0.97);
+    padding: 10px 20px 12px;
+  }
+
+  .cal-left .cal-agenda-header {
+    margin-bottom: 8px;
+  }
+
+  /* 右: カレンダーパネル — 最大幅・透明背景 */
+  .cal-right .calendar-panel {
+    width: 100%;
+    max-width: 560px;
+    background: transparent;
+    border: none;
+    padding: 0;
+  }
+
+  /* 右: 日付文字・円を PC サイズに */
+  .cal-right .cal-day .num {
+    font-size: 0.90rem;
+  }
+
+  .cal-right .cal-day-circle {
+    width: 70%;
+  }
+
+  /* FAB: 左パネル下部 (アジェンダ190 + ポモドーロ〜68px の上) */
+  .cal-fab {
+    bottom: 268px;
+    right: auto;
+    left: calc(340px - 66px);
+  }
 }
 
 /* 起動時ヒーロー: 直近の打ち上げ画像を画面いっぱいに表示 */
@@ -835,7 +1184,7 @@ body {
   gap: 6px;
 }
 
-.cal-nav button {
+.cal-nav button:not(.cal-today-btn) {
   width: 28px;
   height: 28px;
   border-radius: 50%;
@@ -846,7 +1195,7 @@ body {
   cursor: pointer;
 }
 
-.cal-nav button:hover {
+.cal-nav button:not(.cal-today-btn):hover {
   border-color: #7ab8ff;
   color: #7ab8ff;
 }
@@ -1444,8 +1793,14 @@ body {
 }
 
 .today-bg--img {
-  animation: kenBurns 22s ease-out both;
+  animation: heroReveal 22s ease-out both;
   transform-origin: center center;
+}
+
+@keyframes heroReveal {
+  0%   { transform: translateY(60px) scale(1.0); opacity: 0; }
+  3.5% { transform: translateY(0)    scale(1.0); opacity: 1; }
+  100% { transform: translateY(0)    scale(1.09); opacity: 1; }
 }
 
 .today-bg--fallback {
@@ -1521,6 +1876,14 @@ body {
   margin-top: 16px;
   border-top: 1px solid rgba(255, 255, 255, 0.14);
   padding-top: 14px;
+}
+
+@media (min-width: 768px) {
+  .hero-today-date,
+  .today-event-list,
+  .today-empty {
+    margin-right: 216px;
+  }
 }
 
 .today-event-item {

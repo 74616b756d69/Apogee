@@ -51,10 +51,27 @@ function formatAgendaDate(key) {
   return `${m}月${d}日（${weekday}）`
 }
 
-function CalendarView({ isActive }) {
+function calcCountdown(net) {
+  if (!net) return null
+  const diff = new Date(net).getTime() - Date.now()
+  if (diff <= 0) return { launched: true }
+  const days    = Math.floor(diff / 86400000)
+  const hours   = Math.floor((diff % 86400000) / 3600000)
+  const minutes = Math.floor((diff % 3600000) / 60000)
+  const seconds = Math.floor((diff % 60000) / 1000)
+  return { days, hours, minutes, seconds, launched: false }
+}
+
+function pad2(n) { return String(n).padStart(2, '0') }
+
+const POMO_DURATIONS = { work: 25 * 60, short: 5 * 60, long: 15 * 60 }
+const POMO_LABELS    = { work: 'FOCUS', short: 'BREAK', long: 'LONG BREAK' }
+
+function CalendarView({ isActive, pomo, setPomo }) {
   const [launches, setLaunches]       = useState([])
   const [viewDate, setViewDate]       = useState(() => new Date())
   const [selectedKey, setSelectedKey] = useState(null)
+  const [countdown, setCountdown]     = useState(null)
 
   const [calEvents, setCalEvents]         = useState([])
   const [loadingEvents, setLoadingEvents] = useState(false)
@@ -76,6 +93,15 @@ function CalendarView({ isActive }) {
   }, [])
 
   const nearestLaunch = launches[0] ?? null
+
+  useEffect(() => {
+    if (!nearestLaunch?.net) return
+    const tick = () => setCountdown(calcCountdown(nearestLaunch.net))
+    tick()
+    const id = setInterval(tick, 1000)
+    return () => clearInterval(id)
+  }, [nearestLaunch?.net])
+
 
   const launchesByDate = useMemo(() => {
     const map = {}
@@ -207,126 +233,204 @@ function CalendarView({ isActive }) {
   return (
     <div className="calendar-view">
 
-      {/* 月グリッド */}
-      <div className="calendar-panel">
-        <div className="cal-header">
-          <div className="cal-month">
-            <span>{year}</span>
-            {month + 1}月
-          </div>
-          <div className="cal-nav">
-            {isViewingOtherMonth && (
-              <button
-                className="cal-today-btn"
-                onClick={() => { setViewDate(new Date()); setSelectedKey(null) }}
-              >
-                今日
-              </button>
+      {/* 左パネル: 打ち上げ情報 + アジェンダ */}
+      <div className="cal-left">
+
+        {nearestLaunch && (
+          <div className="cal-next-launch">
+            {nearestLaunch.imageUrl && (
+              <img src={nearestLaunch.imageUrl} alt="" className="cal-next-launch-img" />
             )}
-            <button onClick={() => changeMonth(-1)} aria-label="前の月">‹</button>
-            <button onClick={() => changeMonth(1)}  aria-label="次の月">›</button>
+            <div className="cal-next-launch-overlay" />
+            <div className="cal-next-launch-body">
+              {/* PC専用: カウントダウン (SP版と同じスタイル) */}
+              <div className="cal-pc-countdown">
+                <p className="cal-countdown-label">T − MINUS</p>
+                {countdown && !countdown.launched && (
+                  <div className="countdown">
+                    <div className="countdown-unit">
+                      <span className="countdown-num">{pad2(countdown.days)}</span>
+                      <span className="countdown-lbl">DAYS</span>
+                    </div>
+                    <span className="countdown-sep">:</span>
+                    <div className="countdown-unit">
+                      <span className="countdown-num">{pad2(countdown.hours)}</span>
+                      <span className="countdown-lbl">HOURS</span>
+                    </div>
+                    <span className="countdown-sep">:</span>
+                    <div className="countdown-unit">
+                      <span className="countdown-num">{pad2(countdown.minutes)}</span>
+                      <span className="countdown-lbl">MINS</span>
+                    </div>
+                    <span className="countdown-sep">:</span>
+                    <div className="countdown-unit">
+                      <span className="countdown-num countdown-num--sec">{pad2(countdown.seconds)}</span>
+                      <span className="countdown-lbl">SECS</span>
+                    </div>
+                  </div>
+                )}
+                {countdown?.launched && (
+                  <p className="countdown-launched">LAUNCHED</p>
+                )}
+              </div>
+
+              <div className="cal-next-launch-info">
+                <p className="cal-next-launch-label">NEXT LAUNCH</p>
+                <p className="cal-next-launch-name">{nearestLaunch.name}</p>
+                <p className="cal-next-launch-meta">{formatLaunchDate(nearestLaunch.net)}</p>
+                {nearestLaunch.locationName && (
+                  <p className="cal-next-launch-meta">{nearestLaunch.locationName}</p>
+                )}
+                {nearestLaunch.webcastUrl && (
+                  <a className="cal-webcast-link" href={nearestLaunch.webcastUrl} target="_blank" rel="noreferrer">
+                    ▶ ライブ配信を見る
+                  </a>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* PC専用: ポモドーロタイマー */}
+        <div className="cal-pomo">
+          <div className="cal-pomo-header">
+            <span className={`cal-pomo-mode cal-pomo-mode--${pomo.mode}`}>
+              {POMO_LABELS[pomo.mode]}
+            </span>
+            <span className="cal-pomo-dots">
+              {[0, 1, 2, 3].map(i => (
+                <span key={i} className={`cal-pomo-dot${i < (pomo.count % 4 || (pomo.count > 0 && pomo.count % 4 === 0 ? 4 : 0)) ? ' done' : ''}`} />
+              ))}
+            </span>
+          </div>
+          <div className="cal-pomo-body">
+            <span className="cal-pomo-time">
+              {pad2(Math.floor(pomo.secs / 60))}:{pad2(pomo.secs % 60)}
+            </span>
+            <div className="cal-pomo-btns">
+              <button
+                className="cal-pomo-btn cal-pomo-btn--main"
+                onClick={() => setPomo(p => ({ ...p, running: !p.running }))}
+                aria-label={pomo.running ? '一時停止' : '開始'}
+              >
+                {pomo.running ? '⏸' : '▶'}
+              </button>
+              <button
+                className="cal-pomo-btn"
+                onClick={() => setPomo(p => ({ ...p, secs: POMO_DURATIONS[p.mode], running: false }))}
+                aria-label="リセット"
+              >
+                ↺
+              </button>
+            </div>
           </div>
         </div>
-        <div className="weekdays">
-          {WEEKDAYS.map(w => <div key={w}>{w}</div>)}
-        </div>
-        <div className="cal-grid">
-          {cells.map((cell, i) => {
-            const launchList = cell.key ? (launchesByDate[cell.key] || []) : []
-            const hasLaunch  = launchList.length > 0
-            const isToday    = cell.key === todayKey
-            const isSelected = cell.key === activeKey
-            return (
-              <button
-                key={i}
-                className={`cal-day ${cell.faint ? 'faint' : ''} ${isToday ? 'today' : ''} ${isSelected && !cell.faint ? 'selected' : ''}`}
-                disabled={cell.faint}
-                onClick={() => cell.key && setSelectedKey(cell.key)}
-              >
-                <span className="cal-day-circle">
-                  <span className="num">{cell.day}</span>
-                </span>
-                {hasLaunch && (
-                  <span className="launch-dot-row">
-                    {launchList.slice(0, 3).map((_, idx) => (
-                      <span key={idx} className="launch-dot" />
-                    ))}
-                  </span>
-                )}
-              </button>
-            )
-          })}
+
+        <div className="calendar-agenda">
+          <div className="cal-agenda-header">
+            <p className="cal-agenda-date">{formatAgendaDate(activeKey)}</p>
+            {totalEvents > 0 && (
+              <span className="cal-agenda-count">{totalEvents}件</span>
+            )}
+          </div>
+
+          {calEvents.map(e => (
+            <div className="launch-row cal-row--event" key={e.uid}>
+              <span className="cal-row-bar cal-row-bar--apple" />
+              <div className="launch-thumb cal-event-thumb">
+                <span className="cal-event-icon">●</span>
+              </div>
+              <div className="launch-info">
+                <b>{e.title}</b>
+                <span>{e.allDay ? '終日' : e.startTime}</span>
+              </div>
+            </div>
+          ))}
+
+          {selectedLaunches.map(launch => (
+            <div className="launch-row cal-row--event" key={launch.id}>
+              <span className="cal-row-bar cal-row-bar--launch" />
+              <div className="launch-thumb launch-thumb--img">
+                {launch.imageUrl
+                  ? <img src={launch.imageUrl} alt="" className="launch-row-img" onError={e => { e.target.style.display = 'none' }} />
+                  : <span>🚀</span>
+                }
+              </div>
+              <div className="launch-info">
+                <b>{launch.name}</b>
+                <span>{[formatTime(launch.net), launch.locationName].filter(Boolean).join(' · ')}</span>
+              </div>
+              {launch.statusName && <span className="badge badge-default">{launch.statusName}</span>}
+            </div>
+          ))}
+
+          {loadingEvents && calEvents.length === 0 && (
+            <LaunchLoader />
+          )}
+
+          {!loadingEvents && totalEvents === 0 && (
+            <div className="state-msg">この日の予定はありません</div>
+          )}
+
+          <div className="cal-agenda-spacer" />
         </div>
       </div>
 
-      {/* 直近の打ち上げカード */}
-      {nearestLaunch && (
-        <div className="cal-next-launch">
-          {nearestLaunch.imageUrl && (
-            <img src={nearestLaunch.imageUrl} alt="" className="cal-next-launch-img" />
-          )}
-          <div className="cal-next-launch-overlay" />
-          <div className="cal-next-launch-body">
-            <p className="cal-next-launch-label">NEXT LAUNCH</p>
-            <p className="cal-next-launch-name">{nearestLaunch.name}</p>
-            <p className="cal-next-launch-meta">{formatLaunchDate(nearestLaunch.net)}</p>
-            {nearestLaunch.locationName && (
-              <p className="cal-next-launch-meta">{nearestLaunch.locationName}</p>
-            )}
+      {/* 右パネル: 月グリッド */}
+      <div className="cal-right">
+        <div className="calendar-panel">
+          <div className="cal-header">
+            <div className="cal-month">
+              <span>{year}</span>
+              {month + 1}月
+            </div>
+            <div className="cal-nav">
+              {isViewingOtherMonth && (
+                <button
+                  className="cal-today-btn"
+                  onClick={() => { setViewDate(new Date()); setSelectedKey(todayKey) }}
+                >
+                  今日
+                </button>
+              )}
+              <button onClick={() => changeMonth(-1)} aria-label="前の月">‹</button>
+              <button onClick={() => changeMonth(1)}  aria-label="次の月">›</button>
+            </div>
+          </div>
+          <div className="weekdays">
+            {WEEKDAYS.map(w => <div key={w}>{w}</div>)}
+          </div>
+          <div className="cal-grid">
+            {cells.map((cell, i) => {
+              const launchList = cell.key ? (launchesByDate[cell.key] || []) : []
+              const hasLaunch  = launchList.length > 0
+              const isToday    = cell.key === todayKey
+              const isSelected = cell.key === activeKey
+              return (
+                <button
+                  key={i}
+                  className={`cal-day ${cell.faint ? 'faint' : ''} ${isToday ? 'today' : ''} ${isSelected && !cell.faint ? 'selected' : ''}`}
+                  disabled={cell.faint}
+                  onClick={() => {
+                    if (!cell.key) return
+                    setSelectedKey(cell.key === selectedKey ? todayKey : cell.key)
+                  }}
+                >
+                  <span className="cal-day-circle">
+                    <span className="num">{cell.day}</span>
+                  </span>
+                  {hasLaunch && (
+                    <span className="launch-dot-row">
+                      {launchList.slice(0, 3).map((_, idx) => (
+                        <span key={idx} className="launch-dot" />
+                      ))}
+                    </span>
+                  )}
+                </button>
+              )
+            })}
           </div>
         </div>
-      )}
-
-      {/* アジェンダ */}
-      <div className="calendar-agenda">
-        <div className="cal-agenda-header">
-          <p className="cal-agenda-date">{formatAgendaDate(activeKey)}</p>
-          {totalEvents > 0 && (
-            <span className="cal-agenda-count">{totalEvents}件</span>
-          )}
-        </div>
-
-        {/* Apple Calendar イベント */}
-        {calEvents.map(e => (
-          <div className="launch-row cal-row--event" key={e.uid}>
-            <span className="cal-row-bar cal-row-bar--apple" />
-            <div className="launch-thumb cal-event-thumb">
-              <span className="cal-event-icon">●</span>
-            </div>
-            <div className="launch-info">
-              <b>{e.title}</b>
-              <span>{e.allDay ? '終日' : e.startTime}</span>
-            </div>
-          </div>
-        ))}
-
-        {/* 打ち上げイベント */}
-        {selectedLaunches.map(launch => (
-          <div className="launch-row cal-row--event" key={launch.id}>
-            <span className="cal-row-bar cal-row-bar--launch" />
-            <div className="launch-thumb launch-thumb--img">
-              {launch.imageUrl
-                ? <img src={launch.imageUrl} alt="" className="launch-row-img" onError={e => { e.target.style.display = 'none' }} />
-                : <span>🚀</span>
-              }
-            </div>
-            <div className="launch-info">
-              <b>{launch.name}</b>
-              <span>{[formatTime(launch.net), launch.locationName].filter(Boolean).join(' · ')}</span>
-            </div>
-            {launch.statusName && <span className="badge badge-default">{launch.statusName}</span>}
-          </div>
-        ))}
-
-        {loadingEvents && calEvents.length === 0 && (
-          <LaunchLoader />
-        )}
-
-        {!loadingEvents && totalEvents === 0 && (
-          <div className="state-msg">この日の予定はありません</div>
-        )}
-
-        <div className="cal-agenda-spacer" />
       </div>
 
       {/* FAB */}

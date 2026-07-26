@@ -5,6 +5,8 @@ import PreviousLaunchesView from './components/PreviousLaunchesView'
 import AgencyView from './components/AgencyView'
 import StatsView from './components/StatsView'
 
+const POMO_DURATIONS = { work: 25 * 60, short: 5 * 60, long: 15 * 60 }
+
 const PAGES = [
   { id: 'today',    endpoint: null },
   { id: 'calendar', endpoint: null },
@@ -19,7 +21,27 @@ function App() {
   const [pageError,   setPageError]   = useState({})
   const [currentPage, setCurrentPage] = useState(0)
   const [accentColor, setAccentColor] = useState(null)
+  const [pomo, setPomo] = useState({ mode: 'work', secs: 25 * 60, running: false, count: 0 })
   const scrollRef = useRef(null)
+
+  useEffect(() => {
+    if (!pomo.running) return
+    const id = setInterval(() => {
+      setPomo(prev => {
+        if (prev.secs > 0) return { ...prev, secs: prev.secs - 1 }
+        let nextMode, nextCount
+        if (prev.mode === 'work') {
+          nextCount = prev.count + 1
+          nextMode  = nextCount % 4 === 0 ? 'long' : 'short'
+        } else {
+          nextMode  = 'work'
+          nextCount = prev.count
+        }
+        return { mode: nextMode, secs: POMO_DURATIONS[nextMode], running: false, count: nextCount }
+      })
+    }, 1000)
+    return () => clearInterval(id)
+  }, [pomo.running])
 
   useEffect(() => {
     PAGES.forEach((page, i) => {
@@ -60,12 +82,12 @@ function App() {
       <div className="pages" ref={scrollRef}>
         {/* 今日 */}
         <div className="page">
-          <TodayView onColorDetected={setAccentColor} />
+          <TodayView onColorDetected={setAccentColor} pomo={pomo} setPomo={setPomo} />
         </div>
 
         {/* カレンダー */}
         <div className="page">
-          <CalendarView isActive={currentPage === 1} />
+          <CalendarView isActive={currentPage === 1} pomo={pomo} setPomo={setPomo} />
         </div>
 
         {/* 過去の打ち上げ */}

@@ -106,7 +106,39 @@ function Countdown({ net }) {
   )
 }
 
-function TodayView({ onColorDetected }) {
+const POMO_LABELS = { work: 'FOCUS', short: 'SHORT BREAK', long: 'LONG BREAK' }
+const POMO_DURATIONS_TV = { work: 25 * 60, short: 5 * 60, long: 15 * 60 }
+
+function pad2tv(n) { return String(n).padStart(2, '0') }
+
+function sectorPath(cx, cy, r, progress) {
+  if (progress >= 0.999) {
+    return `M ${cx} ${cy - r} A ${r} ${r} 0 1 1 ${cx - 0.001} ${cy - r} Z`
+  }
+  if (progress <= 0.001) return ''
+  const endAngle = -Math.PI / 2 + progress * 2 * Math.PI
+  const ex = (cx + r * Math.cos(endAngle)).toFixed(3)
+  const ey = (cy + r * Math.sin(endAngle)).toFixed(3)
+  return `M ${cx} ${cy} L ${cx} ${cy - r} A ${r} ${r} 0 ${progress > 0.5 ? 1 : 0} 1 ${ex} ${ey} Z`
+}
+
+function AnalogTimer({ secs, mode }) {
+  const total = POMO_DURATIONS_TV[mode]
+  const progress = total > 0 ? secs / total : 1
+  const R = 44
+  const d = sectorPath(60, 60, R, progress)
+
+  return (
+    <svg viewBox="0 0 120 120" className="pomo-dial">
+      <circle cx="60" cy="60" r={R} className="pomo-bg-circle" />
+      {d && <path d={d} className={`pomo-sector pomo-sector--${mode}`} />}
+      <circle cx="60" cy="60" r={R} fill="none"
+        stroke="rgba(255,255,255,0.18)" strokeWidth="1" />
+    </svg>
+  )
+}
+
+function TodayView({ onColorDetected, pomo, setPomo }) {
   const [launches, setLaunches]     = useState([])
   const [selectedIdx, setSelectedIdx] = useState(0)
   const [phase, setPhase]           = useState('launch')
@@ -114,8 +146,15 @@ function TodayView({ onColorDetected }) {
   const [calEvents, setCalEvents]   = useState([])
   const [calLoading, setCalLoading] = useState(true)
   const [showMap, setShowMap]       = useState(false)
+  const [launchKey, setLaunchKey]   = useState(0)
+  const [clock, setClock] = useState(() => new Date())
   const imgRef     = useRef(null)
   const pageRef    = useRef(null)
+
+  useEffect(() => {
+    const id = setInterval(() => setClock(new Date()), 1000)
+    return () => clearInterval(id)
+  }, [])
 
   const selectedLaunch = launches[selectedIdx] ?? null
   const heroUrl        = selectedLaunch?.imageUrl ?? null
@@ -157,6 +196,18 @@ function TodayView({ onColorDetected }) {
     return () => document.removeEventListener('visibilitychange', onVisible)
   }, [])
 
+  // ポモドーロ実行中: フルサイクル (LAUNCH + TODAY) ごとに次の打ち上げへ自動送り
+  useEffect(() => {
+    if (!pomo.running || launches.length <= 1) return
+    const id = setInterval(() => {
+      setSelectedIdx(prev => (prev + 1) % launches.length)
+      setLaunchKey(k => k + 1)
+      setPhase('launch')
+      setCycleKey(k => k + 1)
+    }, LAUNCH_PHASE_MS + TODAY_PHASE_MS)
+    return () => clearInterval(id)
+  }, [pomo.running, launches.length])
+
   // カレンダー取得: 選択中の打ち上げが今日なら今日のカレンダー、それ以外は打ち上げ日のカレンダー
   useEffect(() => {
     setCalLoading(true)
@@ -175,6 +226,7 @@ function TodayView({ onColorDetected }) {
 
   const handleCardSelect = (idx) => {
     setSelectedIdx(idx)
+    setLaunchKey(k => k + 1)
     setPhase('launch')
     setCycleKey(k => k + 1)
     setShowMap(false)
@@ -190,7 +242,7 @@ function TodayView({ onColorDetected }) {
       {/* ── ヒーローセクション（フルスクリーン） ── */}
       <div className="today-hero">
         {heroUrl ? (
-          <img ref={imgRef} src={heroUrl} alt="" className="today-bg today-bg--img"
+          <img key={launchKey} ref={imgRef} src={heroUrl} alt="" className="today-bg today-bg--img"
             crossOrigin="anonymous" onLoad={handleLoad} />
         ) : (
           <div className="today-bg today-bg--fallback" />
@@ -198,7 +250,7 @@ function TodayView({ onColorDetected }) {
         <div className="today-scrim" />
 
         {/* Phase 1: NEXT LAUNCH + カウントダウン */}
-        <div className={`hero-content hero-phase${isToday ? ' hero-phase--exit' : ''}`}>
+        <div key={launchKey} className={`hero-content hero-phase${isToday ? ' hero-phase--exit' : ''}`}>
           {selectedLaunch && (
             <>
               <p  className="hero-eyebrow hero-anim hero-anim--1">NEXT LAUNCH</p>
@@ -251,6 +303,44 @@ function TodayView({ onColorDetected }) {
         {launches.length > 1 && (
           <div className="scroll-hint">
             <span className="scroll-hint-arrow">↓</span>
+          </div>
+        )}
+
+        {/* PC専用ウィジェット: 右下アナログタイマー + 時計 */}
+        {pomo && (
+          <div className="today-pc-widget">
+            <div className="today-pc-clock">
+              <span className="today-pc-time">
+                {clock.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Asia/Tokyo', hour12: false })}
+              </span>
+              <span className="today-pc-tz">JST</span>
+            </div>
+
+            <AnalogTimer secs={pomo.secs} mode={pomo.mode} />
+
+            <div className="today-pomo-dots">
+              {[0,1,2,3].map(i => {
+                const filled = pomo.mode === 'long' ? 4 : pomo.count % 4
+                return <span key={i} className={`cal-pomo-dot${i < filled ? ' done' : ''}`} />
+              })}
+            </div>
+
+            <div className="cal-pomo-btns">
+              <button
+                className="cal-pomo-btn cal-pomo-btn--main"
+                onClick={() => setPomo(p => ({ ...p, running: !p.running }))}
+                aria-label={pomo.running ? '一時停止' : '開始'}
+              >
+                {pomo.running ? '⏸' : '▶'}
+              </button>
+              <button
+                className="cal-pomo-btn"
+                onClick={() => setPomo(p => ({ ...p, secs: POMO_DURATIONS_TV[p.mode], running: false }))}
+                aria-label="リセット"
+              >
+                ↺
+              </button>
+            </div>
           </div>
         )}
       </div>
