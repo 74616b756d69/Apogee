@@ -1,7 +1,11 @@
+import { useState } from 'react'
+import LocationMapModal from './LocationMapModal'
+
 /**
  * 打ち上げ1件分のカードコンポーネント
  */
 function LaunchCard({ launch }) {
+  const [showMap, setShowMap] = useState(false)
   const formattedDate = formatDate(launch.net)
   const badgeClass   = getStatusBadgeClass(launch.statusName)
 
@@ -20,7 +24,18 @@ function LaunchCard({ launch }) {
       <div className="card-body">
         {/* タイトル + ステータスバッジ */}
         <div className="card-header">
-          <h3 className="card-title">{launch.name}</h3>
+          <div className="card-title-group">
+            {launch.locationName && (
+              <button
+                className="info-icon-btn"
+                aria-label="打ち上げ場所を地図で見る"
+                onClick={() => setShowMap(true)}
+              >
+                i
+              </button>
+            )}
+            <h3 className="card-title">{launch.name}</h3>
+          </div>
           {launch.statusName && (
             <span className={`badge ${badgeClass}`}>{launch.statusName}</span>
           )}
@@ -39,6 +54,10 @@ function LaunchCard({ launch }) {
           <p className="card-desc">{launch.missionDescription}</p>
         )}
       </div>
+
+      {showMap && (
+        <LocationMapModal launch={launch} onClose={() => setShowMap(false)} />
+      )}
     </article>
   )
 }

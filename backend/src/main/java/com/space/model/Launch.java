@@ -55,6 +55,14 @@ public class Launch {
     @Column(name = "location_name", length = 255)
     private String locationName;
 
+    /** 打ち上げ施設の緯度 */
+    @Column(name = "pad_latitude")
+    private Double padLatitude;
+
+    /** 打ち上げ施設の経度 */
+    @Column(name = "pad_longitude")
+    private Double padLongitude;
+
     /** 打ち上げ画像 URL */
     @Column(name = "image_url", columnDefinition = "TEXT")
     private String imageUrl;

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import LaunchCard from './components/LaunchCard'
 import TodayView from './components/TodayView'
 import CalendarView from './components/CalendarView'
+import LaunchLoader from './components/LaunchLoader'
 
 const PAGES = [
   { id: 'today',    endpoint: null },
@@ -68,7 +69,7 @@ function App() {
         {/* 打ち上げ予定 */}
         <div className="page">
           <div className="page-content">
-            {pageLoading[2] && <div className="state-msg">⏳ 読み込み中...</div>}
+            {pageLoading[2] && <LaunchLoader />}
             {pageError[2]   && <div className="state-msg error">データの取得に失敗しました: {pageError[2]}</div>}
             {!pageLoading[2] && !pageError[2] && !pageData[2]?.length && (
               <div className="state-msg">データがありません</div>
@@ -84,7 +85,7 @@ function App() {
         {/* 過去の打ち上げ */}
         <div className="page">
           <div className="page-content">
-            {pageLoading[3] && <div className="state-msg">⏳ 読み込み中...</div>}
+            {pageLoading[3] && <LaunchLoader />}
             {pageError[3]   && <div className="state-msg error">データの取得に失敗しました: {pageError[3]}</div>}
             {!pageLoading[3] && !pageError[3] && !pageData[3]?.length && (
               <div className="state-msg">データがありません</div>

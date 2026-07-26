@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import LaunchLoader from './LaunchLoader'
 
 const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土']
 
@@ -281,7 +282,7 @@ function CalendarView({ isActive }) {
         ))}
 
         {loadingEvents && calEvents.length === 0 && (
-          <div className="state-msg">読み込み中...</div>
+          <LaunchLoader />
         )}
 
         {!loadingEvents && calEvents.length === 0 && selectedLaunches.length === 0 && (

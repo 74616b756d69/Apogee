@@ -108,6 +108,12 @@ public class LaunchApiResponse {
         @JsonProperty("name")
         private String name;
 
+        @JsonProperty("latitude")
+        private Double latitude;
+
+        @JsonProperty("longitude")
+        private Double longitude;
+
         @JsonProperty("location")
         private LocationDto location;
     }

@@ -137,6 +137,8 @@ public class DataSyncService {
 
         if (r.getPad() != null) {
             launch.setPadName(r.getPad().getName());
+            launch.setPadLatitude(r.getPad().getLatitude());
+            launch.setPadLongitude(r.getPad().getLongitude());
             if (r.getPad().getLocation() != null) {
                 launch.setLocationName(r.getPad().getLocation().getName());
             }

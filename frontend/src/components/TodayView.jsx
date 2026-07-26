@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
+import LocationMapModal from './LocationMapModal'
+import LaunchLoader from './LaunchLoader'
 
 const LAUNCH_PHASE_MS = 8000   // NEXT LAUNCH 表示時間
 const TODAY_PHASE_MS  = 15000  // TODAY 表示時間
@@ -107,6 +109,7 @@ function TodayView({ onColorDetected }) {
   const [cycleKey, setCycleKey]     = useState(0)
   const [calEvents, setCalEvents]   = useState([])
   const [calLoading, setCalLoading] = useState(true)
+  const [showMap, setShowMap]       = useState(false)
   const imgRef     = useRef(null)
   const pageRef    = useRef(null)
 
@@ -169,6 +172,7 @@ function TodayView({ onColorDetected }) {
     setSelectedIdx(idx)
     setPhase('launch')
     setCycleKey(k => k + 1)
+    setShowMap(false)
     // ページの先頭へスクロール
     pageRef.current?.closest('.page')?.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -193,7 +197,18 @@ function TodayView({ onColorDetected }) {
           {selectedLaunch && (
             <>
               <p  className="hero-eyebrow hero-anim hero-anim--1">NEXT LAUNCH</p>
-              <h2 className="hero-name    hero-anim hero-anim--2">{selectedLaunch.name}</h2>
+              <div className="hero-name-row hero-anim hero-anim--2">
+                {selectedLaunch.locationName && (
+                  <button
+                    className="info-icon-btn info-icon-btn--hero"
+                    aria-label="打ち上げ場所を地図で見る"
+                    onClick={() => setShowMap(true)}
+                  >
+                    i
+                  </button>
+                )}
+                <h2 className="hero-name">{selectedLaunch.name}</h2>
+              </div>
               <p  className="hero-meta    hero-anim hero-anim--3">
                 {[formatLaunchDate(selectedLaunch.net), selectedLaunch.locationName].filter(Boolean).join('  ·  ')}
               </p>
@@ -210,7 +225,7 @@ function TodayView({ onColorDetected }) {
             {selectedIdx === 0 ? formatDateFull(null) : formatDateFull(selectedLaunch?.net)}
           </h1>
           {calLoading ? (
-            <p className="today-empty">読み込み中...</p>
+            <LaunchLoader size="small" label="" />
           ) : calEvents.length > 0 ? (
             <ul className="today-event-list">
               {calEvents.map((e, i) => (
@@ -266,6 +281,10 @@ function TodayView({ onColorDetected }) {
             )
           })}
         </div>
+      )}
+
+      {showMap && selectedLaunch?.locationName && (
+        <LocationMapModal launch={selectedLaunch} onClose={() => setShowMap(false)} />
       )}
     </div>
   )
