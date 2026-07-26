@@ -857,9 +857,9 @@ body {
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
-    padding: 40px 56px;
-    overflow-y: auto;
+    justify-content: flex-start;
+    padding: 20px 32px;
+    overflow: hidden;
     background: rgba(8, 14, 26, 0.6);
   }
 
@@ -1069,22 +1069,96 @@ body {
     margin-bottom: 8px;
   }
 
-  /* 右: カレンダーパネル — 最大幅・透明背景 */
+  /* 右: カレンダーパネル — 高さを埋めてグリッドを活かす */
   .cal-right .calendar-panel {
     width: 100%;
-    max-width: 560px;
+    max-width: 800px;
     background: transparent;
     border: none;
     padding: 0;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
   }
 
   /* 右: 日付文字・円を PC サイズに */
   .cal-right .cal-day .num {
-    font-size: 0.90rem;
+    font-size: 0.88rem;
+  }
+
+  /* PC: グリッド行に高さを任せ、セル自体は伸縮 */
+  .cal-right .cal-day {
+    aspect-ratio: unset;
+    height: auto;
+    min-height: 0;
+    align-items: flex-start;
+    justify-content: flex-start;
+    padding: 6px 4px 4px;
+    gap: 2px;
+    overflow: hidden;
   }
 
   .cal-right .cal-day-circle {
-    width: 70%;
+    width: 22px;
+    height: 22px;
+    min-width: 22px;
+    min-height: 22px;
+    aspect-ratio: unset;
+    flex-shrink: 0;
+    align-self: flex-start;
+  }
+
+  /* PC: ドットは非表示、インラインイベントを表示 */
+  .cal-right .launch-dot-row {
+    display: none;
+  }
+
+  .cal-right .cal-inline-event {
+    display: block;
+    width: 100%;
+    font-size: 0.62rem;
+    line-height: 1.35;
+    padding: 1px 4px 1px 5px;
+    border-radius: 0 3px 3px 0;
+    border-left: 2px solid;
+    background: rgba(255, 255, 255, 0.06);
+    color: rgba(220, 232, 245, 0.85);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .cal-right .cal-day.selected .cal-inline-event {
+    background: rgba(var(--accent), 0.12);
+    color: rgba(220, 232, 245, 0.90);
+  }
+
+  .cal-right .cal-inline-more {
+    display: block;
+    font-size: 0.58rem;
+    color: rgba(255, 255, 255, 0.30);
+    padding-left: 5px;
+    line-height: 1.2;
+  }
+
+  .cal-right .cal-day.selected .cal-inline-more {
+    color: rgba(255, 255, 255, 0.35);
+  }
+
+  /* スケルトンプレースホルダー */
+  .cal-right .cal-inline-skeleton {
+    display: block;
+    width: 80%;
+    height: 11px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.07);
+  }
+
+  .cal-right .cal-inline-skeleton--short {
+    width: 55%;
   }
 
   /* FAB: 左パネル下部 (アジェンダ190 + ポモドーロ〜68px の上) */
@@ -1229,6 +1303,17 @@ body {
   padding: 2px 0 8px;
 }
 
+/* PC: グリッドが残り高さを埋める */
+@media (min-width: 768px) {
+  .cal-right .cal-grid {
+    flex: 1;
+    min-height: 0;
+    grid-auto-rows: 1fr;
+    align-content: stretch;
+    padding: 2px 0 0;
+  }
+}
+
 .cal-day {
   aspect-ratio: 1;
   display: flex;
@@ -1302,6 +1387,27 @@ body {
 
 .cal-day.selected .launch-dot {
   background: rgba(4, 16, 31, 0.55);
+}
+
+/* インラインイベントチップ: モバイルでは非表示 */
+.cal-inline-event {
+  display: none;
+}
+
+.cal-inline-more {
+  display: none;
+}
+
+/* スケルトン: モバイルでは非表示 */
+.cal-inline-skeleton {
+  display: none;
+}
+
+/* カレンダー名ラベル (アジェンダ) */
+.cal-event-cal-name {
+  font-size: 0.62rem;
+  color: rgba(255, 255, 255, 0.35);
+  margin-left: 2px;
 }
 
 /* 選択した日のアジェンダ */

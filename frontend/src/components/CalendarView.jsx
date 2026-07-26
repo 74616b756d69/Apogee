@@ -27,6 +27,18 @@ function formatTime(dateStr) {
   }
 }
 
+function formatTimeShort(dateStr) {
+  try {
+    return new Date(dateStr).toLocaleString('ja-JP', {
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'Asia/Tokyo',
+    })
+  } catch {
+    return ''
+  }
+}
+
 function formatLaunchDate(dateStr) {
   if (!dateStr) return ''
   try {
@@ -67,6 +79,9 @@ function pad2(n) { return String(n).padStart(2, '0') }
 const POMO_DURATIONS = { work: 25 * 60, short: 5 * 60, long: 15 * 60 }
 const POMO_LABELS    = { work: 'FOCUS', short: 'BREAK', long: 'LONG BREAK' }
 
+// 打ち上げイベントのデフォルトカラー
+const LAUNCH_COLOR = '#e06a3a'
+
 function CalendarView({ isActive, pomo, setPomo }) {
   const [launches, setLaunches]       = useState([])
   const [viewDate, setViewDate]       = useState(() => new Date())
@@ -75,6 +90,10 @@ function CalendarView({ isActive, pomo, setPomo }) {
 
   const [calEvents, setCalEvents]         = useState([])
   const [loadingEvents, setLoadingEvents] = useState(false)
+
+  // 月全体のカレンダーイベント (dateKey → events[])
+  const [monthCalEvents, setMonthCalEvents] = useState({})
+  const [monthCalLoading, setMonthCalLoading] = useState(true)
 
   const [showSheet, setShowSheet]     = useState(false)
   const [form, setForm]               = useState({ title: '', startTime: '', endTime: '', allDay: true })
@@ -102,7 +121,6 @@ function CalendarView({ isActive, pomo, setPomo }) {
     return () => clearInterval(id)
   }, [nearestLaunch?.net])
 
-
   const launchesByDate = useMemo(() => {
     const map = {}
     for (const launch of launches) {
@@ -113,6 +131,20 @@ function CalendarView({ isActive, pomo, setPomo }) {
     }
     return map
   }, [launches])
+
+  const year            = viewDate.getFullYear()
+  const month           = viewDate.getMonth()
+
+  // 月が変わったら月全体のイベントを取得
+  useEffect(() => {
+    setMonthCalEvents({})
+    setMonthCalLoading(true)
+    fetch(`/api/calendar/month?year=${year}&month=${month + 1}`)
+      .then(res => res.ok ? res.json() : Promise.reject())
+      .then(json => setMonthCalEvents(json))
+      .catch(() => {})
+      .finally(() => setMonthCalLoading(false))
+  }, [year, month])
 
   const todayKey  = useMemo(() => toJstDateKey(new Date().toISOString()), [])
   const activeKey = selectedKey ?? (nearestLaunch ? toJstDateKey(nearestLaunch.net) : todayKey)
@@ -148,8 +180,6 @@ function CalendarView({ isActive, pomo, setPomo }) {
       })
   }, [activeKey])
 
-  const year            = viewDate.getFullYear()
-  const month           = viewDate.getMonth()
   const firstWeekday    = new Date(year, month, 1).getDay()
   const daysInMonth     = new Date(year, month + 1, 0).getDate()
   const daysInPrevMonth = new Date(year, month, 0).getDate()
@@ -169,6 +199,29 @@ function CalendarView({ isActive, pomo, setPomo }) {
   while (cells.length % 7 !== 0) {
     cells.push({ day: cells.length - (firstWeekday + daysInMonth) + 1, faint: true, key: null })
   }
+
+  // セルごとの表示イベント (カレンダー + 打ち上げ) を統合
+  const dayCombinedEvents = useMemo(() => {
+    const map = {}
+    for (const [key, events] of Object.entries(monthCalEvents)) {
+      map[key] = [...(map[key] || []), ...events.map(e => ({ ...e, _type: 'cal' }))]
+    }
+    for (const [key, launches] of Object.entries(launchesByDate)) {
+      map[key] = [
+        ...(map[key] || []),
+        ...launches.map(l => ({
+          uid: l.id,
+          title: l.name,
+          allDay: false,
+          startTime: formatTimeShort(l.net),
+          calendarColor: LAUNCH_COLOR,
+          calendarName: 'Launch',
+          _type: 'launch',
+        })),
+      ]
+    }
+    return map
+  }, [monthCalEvents, launchesByDate])
 
   const changeMonth = delta => setViewDate(new Date(year, month + delta, 1))
 
@@ -197,10 +250,12 @@ function CalendarView({ isActive, pomo, setPomo }) {
     setSubmitting(true)
     setSubmitError(null)
     const optimisticEvent = {
-      uid:       `optimistic-${Date.now()}`,
-      title:     form.title.trim(),
-      startTime: form.allDay ? null : (form.startTime || null),
-      allDay:    form.allDay,
+      uid:           `optimistic-${Date.now()}`,
+      title:         form.title.trim(),
+      startTime:     form.allDay ? null : (form.startTime || null),
+      allDay:        form.allDay,
+      calendarName:  null,
+      calendarColor: null,
     }
     try {
       const res = await fetch('/api/calendar/event', {
@@ -243,7 +298,6 @@ function CalendarView({ isActive, pomo, setPomo }) {
             )}
             <div className="cal-next-launch-overlay" />
             <div className="cal-next-launch-body">
-              {/* PC専用: カウントダウン (SP版と同じスタイル) */}
               <div className="cal-pc-countdown">
                 <p className="cal-countdown-label">T − MINUS</p>
                 {countdown && !countdown.launched && (
@@ -291,41 +345,6 @@ function CalendarView({ isActive, pomo, setPomo }) {
           </div>
         )}
 
-        {/* PC専用: ポモドーロタイマー */}
-        <div className="cal-pomo">
-          <div className="cal-pomo-header">
-            <span className={`cal-pomo-mode cal-pomo-mode--${pomo.mode}`}>
-              {POMO_LABELS[pomo.mode]}
-            </span>
-            <span className="cal-pomo-dots">
-              {[0, 1, 2, 3].map(i => (
-                <span key={i} className={`cal-pomo-dot${i < (pomo.count % 4 || (pomo.count > 0 && pomo.count % 4 === 0 ? 4 : 0)) ? ' done' : ''}`} />
-              ))}
-            </span>
-          </div>
-          <div className="cal-pomo-body">
-            <span className="cal-pomo-time">
-              {pad2(Math.floor(pomo.secs / 60))}:{pad2(pomo.secs % 60)}
-            </span>
-            <div className="cal-pomo-btns">
-              <button
-                className="cal-pomo-btn cal-pomo-btn--main"
-                onClick={() => setPomo(p => ({ ...p, running: !p.running }))}
-                aria-label={pomo.running ? '一時停止' : '開始'}
-              >
-                {pomo.running ? '⏸' : '▶'}
-              </button>
-              <button
-                className="cal-pomo-btn"
-                onClick={() => setPomo(p => ({ ...p, secs: POMO_DURATIONS[p.mode], running: false }))}
-                aria-label="リセット"
-              >
-                ↺
-              </button>
-            </div>
-          </div>
-        </div>
-
         <div className="calendar-agenda">
           <div className="cal-agenda-header">
             <p className="cal-agenda-date">{formatAgendaDate(activeKey)}</p>
@@ -336,13 +355,17 @@ function CalendarView({ isActive, pomo, setPomo }) {
 
           {calEvents.map(e => (
             <div className="launch-row cal-row--event" key={e.uid}>
-              <span className="cal-row-bar cal-row-bar--apple" />
+              <span
+                className="cal-row-bar"
+                style={{ background: e.calendarColor || 'rgba(var(--accent), 0.85)' }}
+              />
               <div className="launch-thumb cal-event-thumb">
                 <span className="cal-event-icon">●</span>
               </div>
               <div className="launch-info">
                 <b>{e.title}</b>
                 <span>{e.allDay ? '終日' : e.startTime}</span>
+                {e.calendarName && <span className="cal-event-cal-name">{e.calendarName}</span>}
               </div>
             </div>
           ))}
@@ -376,7 +399,7 @@ function CalendarView({ isActive, pomo, setPomo }) {
         </div>
       </div>
 
-      {/* 右パネル: 月グリッド */}
+      {/* 右パネル: 月グリッド (PC: インライン表示) */}
       <div className="cal-right">
         <div className="calendar-panel">
           <div className="cal-header">
@@ -402,10 +425,10 @@ function CalendarView({ isActive, pomo, setPomo }) {
           </div>
           <div className="cal-grid">
             {cells.map((cell, i) => {
-              const launchList = cell.key ? (launchesByDate[cell.key] || []) : []
-              const hasLaunch  = launchList.length > 0
+              const dayEvents  = cell.key ? (dayCombinedEvents[cell.key] || []) : []
               const isToday    = cell.key === todayKey
               const isSelected = cell.key === activeKey
+              const MAX_INLINE = 3
               return (
                 <button
                   key={i}
@@ -419,12 +442,35 @@ function CalendarView({ isActive, pomo, setPomo }) {
                   <span className="cal-day-circle">
                     <span className="num">{cell.day}</span>
                   </span>
-                  {hasLaunch && (
+                  {/* モバイル: ドット表示 */}
+                  {dayEvents.length > 0 && (
                     <span className="launch-dot-row">
-                      {launchList.slice(0, 3).map((_, idx) => (
+                      {dayEvents.slice(0, 3).map((_, idx) => (
                         <span key={idx} className="launch-dot" />
                       ))}
                     </span>
+                  )}
+                  {/* PC: ロード中はスケルトン、完了後はイベント */}
+                  {monthCalLoading ? (
+                    <>
+                      <div className="cal-inline-skeleton" />
+                      <div className="cal-inline-skeleton cal-inline-skeleton--short" />
+                    </>
+                  ) : (
+                    <>
+                      {dayEvents.slice(0, MAX_INLINE).map((e, idx) => (
+                        <div
+                          key={e.uid + idx}
+                          className="cal-inline-event"
+                          style={{ borderLeftColor: e.calendarColor || '#4a9eff' }}
+                        >
+                          {e.title}
+                        </div>
+                      ))}
+                      {dayEvents.length > MAX_INLINE && (
+                        <div className="cal-inline-more">+{dayEvents.length - MAX_INLINE}</div>
+                      )}
+                    </>
                   )}
                 </button>
               )

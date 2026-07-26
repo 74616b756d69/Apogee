@@ -10,6 +10,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Apple Calendar (CalDAV) 連携 API
@@ -51,6 +52,12 @@ public class CalendarController {
         } catch (Exception e) {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Apple Calendar fetch failed");
         }
+    }
+
+    @GetMapping("/month")
+    public Map<String, List<CalendarEventDto>> getByMonth(
+            @RequestParam int year, @RequestParam int month) {
+        return calendarService.getEventsForMonth(year, month);
     }
 
     @PostMapping("/event")
