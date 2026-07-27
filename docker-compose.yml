@@ -25,6 +25,9 @@ services:
       APPLE_CALENDAR_USERNAME: ${APPLE_CALENDAR_USERNAME:-}
       APPLE_CALENDAR_PASSWORD: ${APPLE_CALENDAR_PASSWORD:-}
       SPACE_API_BASE_URL: ${SPACE_API_BASE_URL:-https://ll.thespacedevs.com/2.2.0}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      ALLOWED_EMAIL: ${ALLOWED_EMAIL:-akahori.t.24kdgn@gmail.com}
     depends_on:
       db:
         condition: service_healthy
