@@ -60,6 +60,11 @@ public class CalendarController {
         return calendarService.getEventsForMonth(year, month);
     }
 
+    @GetMapping("/collections")
+    public List<Map<String, String>> getCollections() {
+        return calendarService.getCollections();
+    }
+
     @PostMapping("/event")
     @ResponseStatus(HttpStatus.CREATED)
     public void createEvent(@RequestBody CalendarEventCreateDto dto) {

@@ -7,6 +7,8 @@ import net.fortuna.ical4j.data.CalendarBuilder;
 import net.fortuna.ical4j.model.Calendar;
 import net.fortuna.ical4j.model.Component;
 import net.fortuna.ical4j.model.DateTime;
+import net.fortuna.ical4j.model.Period;
+import net.fortuna.ical4j.model.PeriodList;
 import net.fortuna.ical4j.model.component.VEvent;
 import net.fortuna.ical4j.model.property.DtStart;
 import net.fortuna.ical4j.model.property.Summary;
@@ -129,7 +131,8 @@ public class AppleCalendarService {
                 .map(info -> CompletableFuture.runAsync(() -> {
                     try {
                         for (CalendarEventDto e : queryDay(info, date)) {
-                            eventMap.putIfAbsent(e.getUid(), e);
+                            String dedup = e.getUid() + "@" + e.getDate();
+                            eventMap.putIfAbsent(dedup, e);
                         }
                     } catch (Exception ex) {
                         log.warn("CalDAV query failed for collection {}: {}", info.url(), ex.getMessage());
@@ -171,7 +174,8 @@ public class AppleCalendarService {
                 .map(info -> CompletableFuture.runAsync(() -> {
                     try {
                         for (CalendarEventDto e : queryRange(info, from, to)) {
-                            allEvents.putIfAbsent(e.getUid(), e);
+                            String dedup = e.getUid() + "@" + e.getDate();
+                            allEvents.putIfAbsent(dedup, e);
                         }
                     } catch (Exception ex) {
                         log.warn("CalDAV month query failed for {}: {}", info.url(), ex.getMessage());
@@ -199,6 +203,20 @@ public class AppleCalendarService {
         } catch (Exception e) {
             log.error("Apple Calendar month fetch failed: {}", e.getMessage());
             return Map.of();
+        }
+    }
+
+    public List<Map<String, String>> getCollections() {
+        if (username.isBlank() || password.isBlank()) return List.of();
+        try {
+            return getCachedCollections().stream()
+                    .map(c -> Map.of(
+                            "name", c.displayName(),
+                            "color", c.color() != null ? c.color() : "#4a9eff"))
+                    .toList();
+        } catch (Exception e) {
+            log.warn("Failed to fetch collections: {}", e.getMessage());
+            return List.of();
         }
     }
 
@@ -246,7 +264,15 @@ public class AppleCalendarService {
         List<CollectionInfo> collections = getCachedCollections();
         if (collections.isEmpty()) throw new Exception("No calendar collections found");
 
-        String col = collections.get(0).url();
+        String targetName = dto.getCalendarName();
+        CollectionInfo target = collections.get(0);
+        if (targetName != null && !targetName.isBlank()) {
+            target = collections.stream()
+                    .filter(c -> c.displayName().equals(targetName))
+                    .findFirst()
+                    .orElse(target);
+        }
+        String col = target.url();
         if (!col.endsWith("/")) col += "/";
         String eventUrl = col + uid + ".ics";
 
@@ -392,12 +418,17 @@ public class AppleCalendarService {
         String xml = sendWebDav("REPORT", info.url(), body, "1");
         if (xml == null) return List.of();
 
+        net.fortuna.ical4j.model.Date rangeStart = new DateTime(
+                java.util.Date.from(today.atStartOfDay(JST).toInstant()));
+        net.fortuna.ical4j.model.Date rangeEnd = new DateTime(
+                java.util.Date.from(today.plusDays(1).atStartOfDay(JST).toInstant()));
+
         List<CalendarEventDto> events = new ArrayList<>();
         Document doc = parseXml(xml);
         NodeList dataNodes = doc.getElementsByTagNameNS("urn:ietf:params:xml:ns:caldav", "calendar-data");
         for (int i = 0; i < dataNodes.getLength(); i++) {
             String icsData = dataNodes.item(i).getTextContent();
-            events.addAll(parseIcs(icsData, info.displayName(), info.color()));
+            events.addAll(parseIcsForRange(icsData, info.displayName(), info.color(), rangeStart, rangeEnd));
         }
         return events;
     }
@@ -428,19 +459,27 @@ public class AppleCalendarService {
         String xml = sendWebDav("REPORT", info.url(), body, "1");
         if (xml == null) return List.of();
 
+        net.fortuna.ical4j.model.Date rangeStart = new DateTime(
+                java.util.Date.from(from.atStartOfDay(JST).toInstant()));
+        net.fortuna.ical4j.model.Date rangeEnd = new DateTime(
+                java.util.Date.from(to.atStartOfDay(JST).toInstant()));
+
         List<CalendarEventDto> events = new ArrayList<>();
         Document doc = parseXml(xml);
         NodeList dataNodes = doc.getElementsByTagNameNS("urn:ietf:params:xml:ns:caldav", "calendar-data");
         for (int i = 0; i < dataNodes.getLength(); i++) {
             String icsData = dataNodes.item(i).getTextContent();
-            events.addAll(parseIcs(icsData, info.displayName(), info.color()));
+            events.addAll(parseIcsForRange(icsData, info.displayName(), info.color(), rangeStart, rangeEnd));
         }
         return events;
     }
 
     // ── iCalendar パース ─────────────────────────────
 
-    private List<CalendarEventDto> parseIcs(String icsData, String calendarName, String calendarColor) {
+    private List<CalendarEventDto> parseIcsForRange(String icsData, String calendarName,
+                                                      String calendarColor,
+                                                      net.fortuna.ical4j.model.Date rangeStart,
+                                                      net.fortuna.ical4j.model.Date rangeEnd) {
         List<CalendarEventDto> result = new ArrayList<>();
         try {
             CalendarBuilder builder = new CalendarBuilder();
@@ -458,24 +497,42 @@ public class AppleCalendarService {
 
                 boolean allDay = !(dtStart.getDate() instanceof DateTime);
 
-                String startTime = null;
-                String dateKey;
-                if (allDay) {
-                    dateKey = LocalDate.of(
-                        dtStart.getDate().toInstant().atZone(JST).getYear(),
-                        dtStart.getDate().toInstant().atZone(JST).getMonthValue(),
-                        dtStart.getDate().toInstant().atZone(JST).getDayOfMonth()
-                    ).toString();
-                } else {
-                    ZonedDateTime zdt = dtStart.getDate().toInstant().atZone(JST);
-                    startTime = zdt.format(TIME_FMT);
-                    dateKey = zdt.toLocalDate().toString();
-                }
+                PeriodList periods = event.getConsumedTime(rangeStart, rangeEnd);
+                LocalDate qStart = rangeStart.toInstant().atZone(JST).toLocalDate();
+                LocalDate qEnd   = rangeEnd.toInstant().atZone(JST).toLocalDate();
 
-                result.add(new CalendarEventDto(uid, title, startTime, null, allDay, calendarName, calendarColor, dateKey));
+                for (Object obj : periods) {
+                    Period period = (Period) obj;
+                    ZonedDateTime pStart = allDay
+                            ? period.getStart().toInstant().atZone(ZoneId.of("UTC"))
+                            : period.getStart().toInstant().atZone(JST);
+                    ZonedDateTime pEnd = allDay
+                            ? period.getEnd().toInstant().atZone(ZoneId.of("UTC"))
+                            : period.getEnd().toInstant().atZone(JST);
+
+                    LocalDate startDate = pStart.toLocalDate();
+                    LocalDate endDate   = pEnd.toLocalDate();
+                    if (!allDay && pEnd.toLocalTime().equals(java.time.LocalTime.MIDNIGHT)) {
+                        endDate = endDate.minusDays(1);
+                    }
+
+                    if (startDate.equals(endDate)) {
+                        String dateKey = startDate.toString();
+                        String startTime = allDay ? null : pStart.format(TIME_FMT);
+                        result.add(new CalendarEventDto(uid + "_" + dateKey, title, startTime, null,
+                                allDay, calendarName, calendarColor, dateKey));
+                    } else {
+                        for (LocalDate d = startDate; !d.isAfter(endDate); d = d.plusDays(1)) {
+                            if (d.isBefore(qStart) || !d.isBefore(qEnd)) continue;
+                            String dateKey = d.toString();
+                            result.add(new CalendarEventDto(uid + "_" + dateKey, title, null, null,
+                                    true, calendarName, calendarColor, dateKey));
+                        }
+                    }
+                }
             }
         } catch (Exception e) {
-            log.warn("iCalendar parse error: {}", e.getMessage());
+            log.warn("iCalendar parse error (range): {}", e.getMessage());
         }
         return result;
     }

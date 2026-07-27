@@ -96,16 +96,25 @@ function CalendarView({ isActive, pomo, setPomo }) {
   // 月全体のカレンダーイベント (dateKey → events[])
   const [monthCalEvents, setMonthCalEvents] = useState({})
   const [monthCalLoading, setMonthCalLoading] = useState(true)
-  const [showLaunches, setShowLaunches] = useState(true)
+  const [showLaunches, setShowLaunches] = useState(() => {
+    const saved = localStorage.getItem('cal-show-launches')
+    return saved === null ? true : saved === 'true'
+  })
 
   const [showSheet, setShowSheet]     = useState(false)
-  const [form, setForm]               = useState({ title: '', startTime: '', endTime: '', allDay: true })
+  const [form, setForm]               = useState({ title: '', date: '', startTime: '', endTime: '', allDay: true, calendarName: '' })
   const [submitting, setSubmitting]   = useState(false)
   const [submitError, setSubmitError] = useState(null)
+  const [collections, setCollections] = useState([])
+  const [collectionsLoaded, setCollectionsLoaded] = useState(false)
 
   const titleRef       = useRef(null)
   const activeKeyRef   = useRef(null)
   const eventsCacheRef = useRef({})
+
+  useEffect(() => {
+    localStorage.setItem('cal-show-launches', String(showLaunches))
+  }, [showLaunches])
 
   useEffect(() => {
     fetch('/api/launches/upcoming')
@@ -254,8 +263,16 @@ function CalendarView({ isActive, pomo, setPomo }) {
     setSelectedKey(key)
   }
 
+  useEffect(() => {
+    if (collectionsLoaded) return
+    fetch('/api/calendar/collections')
+      .then(res => res.ok ? res.json() : Promise.reject())
+      .then(json => { setCollections(json); setCollectionsLoaded(true) })
+      .catch(() => setCollectionsLoaded(true))
+  }, [collectionsLoaded])
+
   const openSheet = () => {
-    setForm({ title: '', startTime: '', endTime: '', allDay: true })
+    setForm({ title: '', date: activeKey || todayKey, startTime: '', endTime: '', allDay: true, calendarName: collections[0]?.name || '' })
     setSubmitError(null)
     setShowSheet(true)
     setTimeout(() => titleRef.current?.focus(), 50)
@@ -275,34 +292,40 @@ function CalendarView({ isActive, pomo, setPomo }) {
   }
 
   const submitEvent = async () => {
-    if (!form.title.trim()) return
+    if (!form.title.trim() || !form.date) return
     setSubmitting(true)
     setSubmitError(null)
+    const targetDate = form.date
+    const selectedCol = collections.find(c => c.name === form.calendarName)
     const optimisticEvent = {
       uid:           `optimistic-${Date.now()}`,
       title:         form.title.trim(),
       startTime:     form.allDay ? null : (form.startTime || null),
       allDay:        form.allDay,
-      calendarName:  null,
-      calendarColor: null,
+      calendarName:  form.calendarName || null,
+      calendarColor: selectedCol?.color || null,
+      date:          targetDate,
     }
     try {
       const res = await fetch('/api/calendar/event', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          title:     optimisticEvent.title,
-          date:      activeKey,
-          startTime: optimisticEvent.startTime,
-          endTime:   form.allDay ? null : (form.endTime || null),
+          title:        optimisticEvent.title,
+          date:         targetDate,
+          startTime:    optimisticEvent.startTime,
+          endTime:      form.allDay ? null : (form.endTime || null),
+          calendarName: form.calendarName || null,
         }),
       })
       if (!res.ok) throw new Error()
-      setCalEvents(prev => {
-        const next = [...prev, optimisticEvent]
-        eventsCacheRef.current[activeKey] = next
-        return next
-      })
+      if (targetDate === activeKey) {
+        setCalEvents(prev => {
+          const next = [...prev, optimisticEvent]
+          eventsCacheRef.current[activeKey] = next
+          return next
+        })
+      }
       closeSheet()
       refreshCalEvents()
     } catch {
@@ -568,46 +591,96 @@ function CalendarView({ isActive, pomo, setPomo }) {
         >
           <div className="cal-sheet">
             <div className="cal-sheet-handle" />
-            <p className="cal-sheet-date">{formatAgendaDate(activeKey)}</p>
+            <div className="cal-sheet-header">
+              <p className="cal-sheet-title">新しい予定</p>
+              <button className="cal-sheet-close" onClick={closeSheet}>✕</button>
+            </div>
             <div className="cal-form">
               <input
                 ref={titleRef}
-                className="cal-input"
-                placeholder="タイトル"
+                className="cal-input cal-input--title"
+                placeholder="タイトルを入力"
                 value={form.title}
                 onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
                 onKeyDown={e => e.key === 'Enter' && submitEvent()}
               />
-              <label className="cal-checkbox-row">
-                <input
-                  type="checkbox"
-                  checked={form.allDay}
-                  onChange={e => setForm(f => ({ ...f, allDay: e.target.checked }))}
-                />
-                終日
-              </label>
-              {!form.allDay && (
-                <div className="cal-time-row">
-                  <input
-                    className="cal-input cal-input--time"
-                    type="time"
-                    value={form.startTime}
-                    onChange={e => setForm(f => ({ ...f, startTime: e.target.value }))}
-                  />
-                  <span className="cal-time-sep">〜</span>
-                  <input
-                    className="cal-input cal-input--time"
-                    type="time"
-                    value={form.endTime}
-                    onChange={e => setForm(f => ({ ...f, endTime: e.target.value }))}
-                  />
+
+              {/* カレンダー選択 */}
+              {collections.length > 0 && (
+                <div className="cal-field">
+                  <label className="cal-field-label">カレンダー</label>
+                  <div className="cal-collection-list">
+                    {collections.map(c => (
+                      <button
+                        key={c.name}
+                        className={`cal-collection-chip${form.calendarName === c.name ? ' active' : ''}`}
+                        onClick={() => setForm(f => ({ ...f, calendarName: c.name }))}
+                      >
+                        <span className="cal-collection-dot" style={{ background: c.color }} />
+                        {c.name}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
+
+              {/* 日付 */}
+              <div className="cal-field">
+                <label className="cal-field-label">日付</label>
+                <input
+                  className="cal-input cal-input--date"
+                  type="date"
+                  value={form.date}
+                  onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
+                />
+              </div>
+
+              {/* 終日 / 時間 */}
+              <div className="cal-field">
+                <div className="cal-allday-row">
+                  <label className="cal-field-label" style={{ marginBottom: 0 }}>時間</label>
+                  <label className="cal-toggle-switch">
+                    <input
+                      type="checkbox"
+                      checked={form.allDay}
+                      onChange={e => setForm(f => ({ ...f, allDay: e.target.checked }))}
+                    />
+                    <span className="cal-toggle-track" />
+                    <span className="cal-toggle-text">終日</span>
+                  </label>
+                </div>
+                {!form.allDay && (
+                  <div className="cal-time-row">
+                    <div className="cal-time-field">
+                      <span className="cal-time-label">開始</span>
+                      <input
+                        className="cal-input cal-input--time"
+                        type="time"
+                        step="300"
+                        value={form.startTime}
+                        onChange={e => setForm(f => ({ ...f, startTime: e.target.value }))}
+                      />
+                    </div>
+                    <span className="cal-time-arrow">→</span>
+                    <div className="cal-time-field">
+                      <span className="cal-time-label">終了</span>
+                      <input
+                        className="cal-input cal-input--time"
+                        type="time"
+                        step="300"
+                        value={form.endTime}
+                        onChange={e => setForm(f => ({ ...f, endTime: e.target.value }))}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {submitError && <p className="cal-error">{submitError}</p>}
               <button
                 className="cal-submit-btn"
                 onClick={submitEvent}
-                disabled={submitting || !form.title.trim()}
+                disabled={submitting || !form.title.trim() || !form.date}
               >
                 {submitting ? '追加中...' : '追加'}
               </button>

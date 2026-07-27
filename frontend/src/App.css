@@ -1441,45 +1441,39 @@ body {
 
 /* カレンダートグル: モバイルでは非表示 */
 .cal-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  user-select: none;
+  padding: 0 2px 4px;
+}
+
+.cal-toggle input {
   display: none;
 }
 
-@media (min-width: 768px) {
-  .cal-toggle {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    cursor: pointer;
-    user-select: none;
-    padding: 0 2px 4px;
-  }
+.cal-toggle-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  opacity: 1;
+  transition: opacity 0.15s;
+}
 
-  .cal-toggle input {
-    display: none;
-  }
+.cal-toggle input:not(:checked) ~ .cal-toggle-dot {
+  opacity: 0.25;
+}
 
-  .cal-toggle-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    flex-shrink: 0;
-    opacity: 1;
-    transition: opacity 0.15s;
-  }
+.cal-toggle-label {
+  font-size: 0.68rem;
+  color: rgba(255, 255, 255, 0.45);
+  transition: color 0.15s;
+}
 
-  .cal-toggle input:not(:checked) ~ .cal-toggle-dot {
-    opacity: 0.25;
-  }
-
-  .cal-toggle-label {
-    font-size: 0.68rem;
-    color: rgba(255, 255, 255, 0.45);
-    transition: color 0.15s;
-  }
-
-  .cal-toggle input:checked ~ .cal-toggle-label {
-    color: rgba(255, 255, 255, 0.7);
-  }
+.cal-toggle input:checked ~ .cal-toggle-label {
+  color: rgba(255, 255, 255, 0.7);
 }
 
 /* インラインイベントチップ: モバイルでは非表示 */
@@ -1804,14 +1798,18 @@ body {
   z-index: 80;
   display: flex;
   align-items: flex-end;
+  justify-content: center;
 }
 
 .cal-sheet {
   width: 100%;
+  max-width: 480px;
   background: #0d1829;
   border-radius: 20px 20px 0 0;
   padding: 12px 20px calc(32px + env(safe-area-inset-bottom));
-  border-top: 1px solid rgba(100, 160, 255, 0.2);
+  border-top: 1px solid rgba(100, 160, 255, 0.15);
+  max-height: 85vh;
+  overflow-y: auto;
 }
 
 .cal-sheet-handle {
@@ -1819,27 +1817,63 @@ body {
   height: 4px;
   background: rgba(255, 255, 255, 0.16);
   border-radius: 2px;
-  margin: 0 auto 16px;
+  margin: 0 auto 12px;
 }
 
-.cal-sheet-date {
-  font-size: 0.75rem;
+.cal-sheet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+
+.cal-sheet-title {
+  font-size: 1.05rem;
   font-weight: 700;
-  letter-spacing: 0.06em;
-  color: rgba(var(--accent), 0.8);
-  margin-bottom: 14px;
+  color: #dce8f5;
+}
+
+.cal-sheet-close {
+  background: none;
+  border: none;
+  color: #5a7a9a;
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: color 0.15s, background 0.15s;
+}
+
+.cal-sheet-close:hover {
+  color: #dce8f5;
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .cal-form {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
+}
+
+.cal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cal-field-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #6a88a8;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 2px;
 }
 
 .cal-input {
   width: 100%;
   background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(100, 160, 255, 0.2);
+  border: 1px solid rgba(100, 160, 255, 0.15);
   border-radius: 10px;
   padding: 12px 14px;
   color: #dce8f5;
@@ -1847,6 +1881,7 @@ body {
   font-family: inherit;
   outline: none;
   box-sizing: border-box;
+  transition: border-color 0.15s;
 }
 
 .cal-input:focus {
@@ -1857,30 +1892,143 @@ body {
   color: #4a6480;
 }
 
+.cal-input--title {
+  font-size: 1.05rem;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(100, 160, 255, 0.1);
+}
+
+.cal-input--date {
+  color-scheme: dark;
+  padding: 10px 14px;
+}
+
 .cal-input--time {
   padding: 10px 12px;
   color-scheme: dark;
+  flex: 1;
 }
 
-.cal-checkbox-row {
+/* カレンダー選択チップ */
+.cal-collection-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.cal-collection-chip {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 20px;
+  border: 1px solid rgba(100, 160, 255, 0.15);
+  background: rgba(255, 255, 255, 0.04);
   color: #7a93b0;
-  font-size: 0.9rem;
+  font-size: 0.82rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.cal-collection-chip:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #dce8f5;
+}
+
+.cal-collection-chip.active {
+  background: rgba(var(--accent), 0.12);
+  border-color: rgba(var(--accent), 0.5);
+  color: rgba(var(--accent), 1);
+}
+
+.cal-collection-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* 終日トグルスイッチ */
+.cal-allday-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.cal-toggle-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   cursor: pointer;
   user-select: none;
 }
 
+.cal-toggle-switch input {
+  display: none;
+}
+
+.cal-toggle-track {
+  width: 40px;
+  height: 22px;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.12);
+  position: relative;
+  transition: background 0.2s;
+}
+
+.cal-toggle-track::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #5a7a9a;
+  transition: transform 0.2s, background 0.2s;
+}
+
+.cal-toggle-switch input:checked + .cal-toggle-track {
+  background: rgba(var(--accent), 0.35);
+}
+
+.cal-toggle-switch input:checked + .cal-toggle-track::after {
+  transform: translateX(18px);
+  background: rgba(var(--accent), 1);
+}
+
+.cal-toggle-text {
+  font-size: 0.85rem;
+  color: #7a93b0;
+}
+
+/* 時間入力 */
 .cal-time-row {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.cal-time-sep {
-  color: #6a88a8;
+.cal-time-field {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cal-time-label {
+  font-size: 0.7rem;
+  color: #5a7a9a;
+  letter-spacing: 0.04em;
+}
+
+.cal-time-arrow {
+  color: #4a6480;
   flex-shrink: 0;
+  padding-top: 16px;
 }
 
 .cal-error {
@@ -1889,7 +2037,7 @@ body {
 }
 
 .cal-submit-btn {
-  padding: 13px;
+  padding: 14px;
   border-radius: 12px;
   background: rgba(var(--accent), 1);
   border: none;
@@ -1898,8 +2046,12 @@ body {
   font-weight: 700;
   font-family: inherit;
   cursor: pointer;
-  transition: opacity 0.15s ease;
-  margin-top: 2px;
+  transition: opacity 0.15s ease, transform 0.1s ease;
+  margin-top: 4px;
+}
+
+.cal-submit-btn:active {
+  transform: scale(0.97);
 }
 
 .cal-submit-btn:disabled {
