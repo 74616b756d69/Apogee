@@ -11,12 +11,18 @@ import net.fortuna.ical4j.model.component.VEvent;
 import net.fortuna.ical4j.model.property.DtStart;
 import net.fortuna.ical4j.model.property.Summary;
 import net.fortuna.ical4j.model.property.Uid;
+import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
 import org.apache.hc.client5.http.classic.methods.HttpUriRequestBase;
+import org.apache.hc.client5.http.config.ConnectionConfig;
 import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
 import org.apache.hc.client5.http.impl.classic.HttpClients;
+import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManager;
+import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManagerBuilder;
 import org.apache.hc.core5.http.ContentType;
 import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.apache.hc.core5.http.io.entity.StringEntity;
+import org.apache.hc.core5.util.Timeout;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.w3c.dom.Document;
@@ -37,7 +43,8 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.IntStream;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 @Slf4j
 @Service
@@ -59,13 +66,44 @@ public class AppleCalendarService {
     private volatile List<CollectionInfo> cachedCollections;
     private volatile long collectionsCachedAt = 0L;
 
-    private static final long EVENTS_TTL_MS = 60 * 1000;
+    private static final long EVENTS_TTL_MS = 5 * 60 * 1000;
     private record CachedEvents(List<CalendarEventDto> events, long cachedAt) {}
     private final Map<LocalDate, CachedEvents> eventsCache = new ConcurrentHashMap<>();
 
-    private static final long MONTH_EVENTS_TTL_MS = 2 * 60 * 1000;
+    private static final long MONTH_EVENTS_TTL_MS = 5 * 60 * 1000;
     private record CachedMonthEvents(Map<String, List<CalendarEventDto>> events, long cachedAt) {}
     private final Map<YearMonth, CachedMonthEvents> monthEventsCache = new ConcurrentHashMap<>();
+
+    private final ExecutorService caldavExecutor = Executors.newFixedThreadPool(8, r -> {
+        Thread t = new Thread(r, "caldav-fetch");
+        t.setDaemon(true);
+        return t;
+    });
+
+    private PoolingHttpClientConnectionManager connManager;
+    private CloseableHttpClient sharedHttpClient;
+
+    @PostConstruct
+    private void initHttpClient() {
+        connManager = PoolingHttpClientConnectionManagerBuilder.create()
+                .setDefaultConnectionConfig(ConnectionConfig.custom()
+                        .setConnectTimeout(Timeout.ofSeconds(10))
+                        .setSocketTimeout(Timeout.ofSeconds(15))
+                        .build())
+                .setMaxConnTotal(20)
+                .setMaxConnPerRoute(10)
+                .build();
+        sharedHttpClient = HttpClients.custom()
+                .setConnectionManager(connManager)
+                .disableRedirectHandling()
+                .build();
+    }
+
+    @PreDestroy
+    private void destroyHttpClient() {
+        try { sharedHttpClient.close(); } catch (Exception ignored) {}
+        connManager.close();
+    }
 
     public List<CalendarEventDto> getTodayEvents() {
         return getEventsForDate(LocalDate.now(JST));
@@ -82,21 +120,21 @@ public class AppleCalendarService {
             return cached.events();
         }
 
-        try (CloseableHttpClient client = buildHttpClient()) {
-            List<CollectionInfo> collections = getCachedCollections(client);
+        try {
+            List<CollectionInfo> collections = getCachedCollections();
             if (collections.isEmpty()) return List.of();
 
             Map<String, CalendarEventDto> eventMap = new ConcurrentHashMap<>();
             List<CompletableFuture<Void>> futures = collections.stream()
                 .map(info -> CompletableFuture.runAsync(() -> {
                     try {
-                        for (CalendarEventDto e : queryDay(client, info, date)) {
+                        for (CalendarEventDto e : queryDay(info, date)) {
                             eventMap.putIfAbsent(e.getUid(), e);
                         }
                     } catch (Exception ex) {
                         log.warn("CalDAV query failed for collection {}: {}", info.url(), ex.getMessage());
                     }
-                }))
+                }, caldavExecutor))
                 .toList();
             CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
 
@@ -121,44 +159,41 @@ public class AppleCalendarService {
             return cached.events();
         }
 
-        try (CloseableHttpClient client = buildHttpClient()) {
-            List<CollectionInfo> collections = getCachedCollections(client);
+        try {
+            List<CollectionInfo> collections = getCachedCollections();
             if (collections.isEmpty()) return Map.of();
 
-            Map<String, List<CalendarEventDto>> result = new ConcurrentHashMap<>();
-            List<CompletableFuture<Void>> futures = IntStream.rangeClosed(1, ym.lengthOfMonth())
-                .mapToObj(d -> {
-                    LocalDate date = LocalDate.of(year, month, d);
-                    return CompletableFuture.runAsync(() -> {
-                        try {
-                            Map<String, CalendarEventDto> eventMap = new ConcurrentHashMap<>();
-                            List<CompletableFuture<Void>> colFutures = collections.stream()
-                                .map(info -> CompletableFuture.runAsync(() -> {
-                                    try {
-                                        for (CalendarEventDto e : queryDay(client, info, date)) {
-                                            eventMap.putIfAbsent(e.getUid(), e);
-                                        }
-                                    } catch (Exception ex) {
-                                        log.warn("CalDAV query failed for {} on {}: {}", info.url(), date, ex.getMessage());
-                                    }
-                                }))
-                                .toList();
-                            CompletableFuture.allOf(colFutures.toArray(new CompletableFuture[0])).join();
+            LocalDate from = ym.atDay(1);
+            LocalDate to = ym.plusMonths(1).atDay(1);
 
-                            if (!eventMap.isEmpty()) {
-                                List<CalendarEventDto> events = new ArrayList<>(eventMap.values());
-                                events.sort(Comparator.comparing(e -> e.getStartTime() == null ? "" : e.getStartTime()));
-                                result.put(date.toString(), events);
-                                eventsCache.put(date, new CachedEvents(events, System.currentTimeMillis()));
-                            }
-                        } catch (Exception ignored) {}
-                    });
-                })
+            Map<String, CalendarEventDto> allEvents = new ConcurrentHashMap<>();
+            List<CompletableFuture<Void>> futures = collections.stream()
+                .map(info -> CompletableFuture.runAsync(() -> {
+                    try {
+                        for (CalendarEventDto e : queryRange(info, from, to)) {
+                            allEvents.putIfAbsent(e.getUid(), e);
+                        }
+                    } catch (Exception ex) {
+                        log.warn("CalDAV month query failed for {}: {}", info.url(), ex.getMessage());
+                    }
+                }, caldavExecutor))
                 .toList();
             CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
 
+            Map<String, List<CalendarEventDto>> result = new HashMap<>();
+            long now = System.currentTimeMillis();
+            for (CalendarEventDto event : allEvents.values()) {
+                if (event.getDate() == null) continue;
+                result.computeIfAbsent(event.getDate(), k -> new ArrayList<>()).add(event);
+            }
+            for (Map.Entry<String, List<CalendarEventDto>> entry : result.entrySet()) {
+                entry.getValue().sort(Comparator.comparing(e -> e.getStartTime() == null ? "" : e.getStartTime()));
+                LocalDate date = LocalDate.parse(entry.getKey());
+                eventsCache.put(date, new CachedEvents(List.copyOf(entry.getValue()), now));
+            }
+
             Map<String, List<CalendarEventDto>> immutableResult = Map.copyOf(result);
-            monthEventsCache.put(ym, new CachedMonthEvents(immutableResult, System.currentTimeMillis()));
+            monthEventsCache.put(ym, new CachedMonthEvents(immutableResult, now));
             return immutableResult;
 
         } catch (Exception e) {
@@ -208,29 +243,27 @@ public class AppleCalendarService {
            .append("END:VEVENT\r\n")
            .append("END:VCALENDAR\r\n");
 
-        try (CloseableHttpClient client = buildHttpClient()) {
-            List<CollectionInfo> collections = getCachedCollections(client);
-            if (collections.isEmpty()) throw new Exception("No calendar collections found");
+        List<CollectionInfo> collections = getCachedCollections();
+        if (collections.isEmpty()) throw new Exception("No calendar collections found");
 
-            String col = collections.get(0).url();
-            if (!col.endsWith("/")) col += "/";
-            String eventUrl = col + uid + ".ics";
+        String col = collections.get(0).url();
+        if (!col.endsWith("/")) col += "/";
+        String eventUrl = col + uid + ".ics";
 
-            HttpUriRequestBase req = new HttpUriRequestBase("PUT", URI.create(eventUrl));
-            req.setHeader("Authorization", basicAuth());
-            req.setHeader("Content-Type", "text/calendar; charset=utf-8");
-            req.setEntity(new StringEntity(ics.toString(),
-                    ContentType.create("text/calendar", StandardCharsets.UTF_8)));
+        HttpUriRequestBase req = new HttpUriRequestBase("PUT", URI.create(eventUrl));
+        req.setHeader("Authorization", basicAuth());
+        req.setHeader("Content-Type", "text/calendar; charset=utf-8");
+        req.setEntity(new StringEntity(ics.toString(),
+                ContentType.create("text/calendar", StandardCharsets.UTF_8)));
 
-            client.execute(req, resp -> {
-                int status = resp.getCode();
-                EntityUtils.consume(resp.getEntity());
-                if (status < 200 || status >= 300) {
-                    throw new RuntimeException("CalDAV PUT failed: " + status);
-                }
-                return null;
-            });
-        }
+        sharedHttpClient.execute(req, resp -> {
+            int status = resp.getCode();
+            EntityUtils.consume(resp.getEntity());
+            if (status < 200 || status >= 300) {
+                throw new RuntimeException("CalDAV PUT failed: " + status);
+            }
+            return null;
+        });
 
         eventsCache.remove(date);
         monthEventsCache.remove(YearMonth.from(date));
@@ -238,12 +271,12 @@ public class AppleCalendarService {
 
     // ── コレクション探索（キャッシュ付き） ───────────────
 
-    private synchronized List<CollectionInfo> getCachedCollections(CloseableHttpClient client) throws Exception {
+    private synchronized List<CollectionInfo> getCachedCollections() throws Exception {
         long now = System.currentTimeMillis();
         if (cachedCollections != null && (now - collectionsCachedAt) < COLLECTIONS_TTL_MS) {
             return cachedCollections;
         }
-        List<CollectionInfo> collections = discoverCollections(client);
+        List<CollectionInfo> collections = discoverCollections();
         if (collections.isEmpty() && cachedCollections != null) {
             return cachedCollections;
         }
@@ -252,41 +285,41 @@ public class AppleCalendarService {
         return collections;
     }
 
-    private List<CollectionInfo> discoverCollections(CloseableHttpClient client) throws Exception {
-        String principalUrl = discoverPrincipal(client);
+    private List<CollectionInfo> discoverCollections() throws Exception {
+        String principalUrl = discoverPrincipal();
         if (principalUrl == null) return List.of();
 
-        String calHome = getCalendarHome(client, principalUrl);
+        String calHome = getCalendarHome(principalUrl);
         if (calHome == null) return List.of();
 
-        return listCollections(client, calHome);
+        return listCollections(calHome);
     }
 
     // ── CalDAV リクエスト ────────────────────────────
 
-    private String discoverPrincipal(CloseableHttpClient client) throws Exception {
+    private String discoverPrincipal() throws Exception {
         String body = """
             <?xml version="1.0" encoding="utf-8"?>
             <d:propfind xmlns:d="DAV:">
               <d:prop><d:current-user-principal/></d:prop>
             </d:propfind>
             """;
-        String xml = sendWebDav(client, "PROPFIND", BASE_URL + "/.well-known/caldav", body, "0");
+        String xml = sendWebDav("PROPFIND", BASE_URL + "/.well-known/caldav", body, "0");
         return xml != null ? extractFirstHref(xml, "current-user-principal") : null;
     }
 
-    private String getCalendarHome(CloseableHttpClient client, String principalUrl) throws Exception {
+    private String getCalendarHome(String principalUrl) throws Exception {
         String body = """
             <?xml version="1.0" encoding="utf-8"?>
             <d:propfind xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
               <d:prop><c:calendar-home-set/></d:prop>
             </d:propfind>
             """;
-        String xml = sendWebDav(client, "PROPFIND", principalUrl, body, "0");
+        String xml = sendWebDav("PROPFIND", principalUrl, body, "0");
         return xml != null ? extractFirstHref(xml, "calendar-home-set") : null;
     }
 
-    private List<CollectionInfo> listCollections(CloseableHttpClient client, String calHome) throws Exception {
+    private List<CollectionInfo> listCollections(String calHome) throws Exception {
         String body = """
             <?xml version="1.0" encoding="utf-8"?>
             <d:propfind xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav"
@@ -298,7 +331,7 @@ public class AppleCalendarService {
               </d:prop>
             </d:propfind>
             """;
-        String xml = sendWebDav(client, "PROPFIND", calHome, body, "1");
+        String xml = sendWebDav("PROPFIND", calHome, body, "1");
         if (xml == null) return List.of();
 
         List<CollectionInfo> infos = new ArrayList<>();
@@ -322,7 +355,6 @@ public class AppleCalendarService {
             NodeList colorNodes = resp.getElementsByTagNameNS("http://apple.com/ns/ical/", "calendar-color");
             if (colorNodes.getLength() > 0) {
                 String raw = colorNodes.item(0).getTextContent().trim();
-                // iCloud returns 8-digit hex (#RRGGBBAA) — strip the alpha channel
                 if (raw.startsWith("#") && raw.length() == 9) {
                     color = raw.substring(0, 7);
                 } else if (raw.startsWith("#") && raw.length() == 7) {
@@ -335,7 +367,7 @@ public class AppleCalendarService {
         return infos;
     }
 
-    private List<CalendarEventDto> queryDay(CloseableHttpClient client, CollectionInfo info, LocalDate today) throws Exception {
+    private List<CalendarEventDto> queryDay(CollectionInfo info, LocalDate today) throws Exception {
         DateTimeFormatter utcFmt = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'");
         String start = today.atStartOfDay(JST).withZoneSameInstant(ZoneId.of("UTC")).format(utcFmt);
         String end   = today.plusDays(1).atStartOfDay(JST).withZoneSameInstant(ZoneId.of("UTC")).format(utcFmt);
@@ -357,7 +389,7 @@ public class AppleCalendarService {
             </c:calendar-query>
             """, start, end);
 
-        String xml = sendWebDav(client, "REPORT", info.url(), body, "1");
+        String xml = sendWebDav("REPORT", info.url(), body, "1");
         if (xml == null) return List.of();
 
         List<CalendarEventDto> events = new ArrayList<>();
@@ -370,7 +402,7 @@ public class AppleCalendarService {
         return events;
     }
 
-    private List<CalendarEventDto> queryRange(CloseableHttpClient client, CollectionInfo info,
+    private List<CalendarEventDto> queryRange(CollectionInfo info,
                                                LocalDate from, LocalDate to) throws Exception {
         DateTimeFormatter utcFmt = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'");
         String start = from.atStartOfDay(JST).withZoneSameInstant(ZoneId.of("UTC")).format(utcFmt);
@@ -393,7 +425,7 @@ public class AppleCalendarService {
             </c:calendar-query>
             """, start, end);
 
-        String xml = sendWebDav(client, "REPORT", info.url(), body, "1");
+        String xml = sendWebDav("REPORT", info.url(), body, "1");
         if (xml == null) return List.of();
 
         List<CalendarEventDto> events = new ArrayList<>();
@@ -450,16 +482,9 @@ public class AppleCalendarService {
 
     // ── ユーティリティ ────────────────────────────────
 
-    private CloseableHttpClient buildHttpClient() {
-        return HttpClients.custom()
-            .disableRedirectHandling()
-            .build();
-    }
-
     private static final String REDIRECT_PREFIX = "REDIRECT:";
 
-    private String sendWebDav(CloseableHttpClient client, String method,
-                               String url, String body, String depth) throws Exception {
+    private String sendWebDav(String method, String url, String body, String depth) throws Exception {
         String currentUrl = url;
         for (int hop = 0; hop < 6; hop++) {
             final String reqUrl = currentUrl;
@@ -470,7 +495,7 @@ public class AppleCalendarService {
             if (body != null) {
                 req.setEntity(new StringEntity(body, ContentType.APPLICATION_XML));
             }
-            String result = client.execute(req, resp -> {
+            String result = sharedHttpClient.execute(req, resp -> {
                 int status = resp.getCode();
                 if (status == 207) {
                     return EntityUtils.toString(resp.getEntity(), StandardCharsets.UTF_8);
