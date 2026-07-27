@@ -15,4 +15,5 @@ public class CalendarEventDto {
     private boolean allDay;
     private String calendarName;
     private String calendarColor; // "#RRGGBB"
+    private String date; // "YYYY-MM-DD"
 }

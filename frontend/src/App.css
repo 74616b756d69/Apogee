@@ -863,10 +863,58 @@ body {
     background: rgba(8, 14, 26, 0.6);
   }
 
-  /* 左: ヒーローが残り高さを全部占める */
-  .cal-left .cal-next-launch {
+  /* 左: 打ち上げアコーディオン */
+  .cal-launch-accordion {
+    flex-shrink: 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    max-height: 50vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .cal-launch-accordion-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 10px 16px;
+    background: none;
+    border: none;
+    color: #c8daea;
+    font-size: 0.78rem;
+    font-family: inherit;
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .cal-launch-accordion-header:hover {
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  .cal-launch-accordion-icon {
+    font-size: 0.9rem;
+  }
+
+  .cal-launch-accordion-title {
     flex: 1;
-    height: auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .cal-launch-accordion-arrow {
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.4);
+  }
+
+  .cal-launch-accordion-body {
+    overflow-y: auto;
+    min-height: 0;
+  }
+
+  .cal-launch-accordion-body .cal-next-launch {
+    height: 280px;
   }
 
   .cal-left .cal-next-launch-img {
@@ -1055,14 +1103,13 @@ body {
     background: rgba(var(--accent), 0.24);
   }
 
-  /* 左: アジェンダ — 固定高さ、スクロール可能 */
+  /* 左: アジェンダ — 残り高さを占めてスクロール */
   .cal-left .calendar-agenda {
-    flex: none;
-    height: 190px;
+    flex: 1;
+    min-height: 0;
     overflow-y: auto;
-    border-top: 1px solid rgba(100, 160, 255, 0.10);
     background: rgba(4, 8, 16, 0.97);
-    padding: 10px 20px 12px;
+    padding: 14px 20px 12px;
   }
 
   .cal-left .cal-agenda-header {
@@ -1161,9 +1208,9 @@ body {
     width: 55%;
   }
 
-  /* FAB: 左パネル下部 (アジェンダ190 + ポモドーロ〜68px の上) */
+  /* FAB: 左パネル下部 */
   .cal-fab {
-    bottom: 268px;
+    bottom: 50px;
     right: auto;
     left: calc(340px - 66px);
   }
@@ -1389,6 +1436,49 @@ body {
   background: rgba(4, 16, 31, 0.55);
 }
 
+/* カレンダートグル: モバイルでは非表示 */
+.cal-toggle {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .cal-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    user-select: none;
+    padding: 0 2px 4px;
+  }
+
+  .cal-toggle input {
+    display: none;
+  }
+
+  .cal-toggle-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    opacity: 1;
+    transition: opacity 0.15s;
+  }
+
+  .cal-toggle input:not(:checked) ~ .cal-toggle-dot {
+    opacity: 0.25;
+  }
+
+  .cal-toggle-label {
+    font-size: 0.68rem;
+    color: rgba(255, 255, 255, 0.45);
+    transition: color 0.15s;
+  }
+
+  .cal-toggle input:checked ~ .cal-toggle-label {
+    color: rgba(255, 255, 255, 0.7);
+  }
+}
+
 /* インラインイベントチップ: モバイルでは非表示 */
 .cal-inline-event {
   display: none;
@@ -1401,6 +1491,61 @@ body {
 /* スケルトン: モバイルでは非表示 */
 .cal-inline-skeleton {
   display: none;
+}
+
+/* アコーディオン内: 打ち上げリスト */
+.cal-launch-list {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .cal-launch-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 4px 8px 10px;
+    max-height: 140px;
+    overflow-y: auto;
+  }
+
+  .cal-launch-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 6px 10px;
+    background: none;
+    border: none;
+    border-radius: 6px;
+    color: rgba(200, 218, 234, 0.7);
+    font-size: 0.72rem;
+    font-family: inherit;
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .cal-launch-item:hover {
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  .cal-launch-item.active {
+    background: rgba(var(--accent), 0.12);
+    color: rgba(200, 218, 234, 0.95);
+  }
+
+  .cal-launch-item-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .cal-launch-item-date {
+    flex-shrink: 0;
+    font-size: 0.65rem;
+    color: rgba(255, 255, 255, 0.35);
+  }
 }
 
 /* カレンダー名ラベル (アジェンダ) */

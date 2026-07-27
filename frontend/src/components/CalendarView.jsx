@@ -87,6 +87,8 @@ function CalendarView({ isActive, pomo, setPomo }) {
   const [viewDate, setViewDate]       = useState(() => new Date())
   const [selectedKey, setSelectedKey] = useState(null)
   const [countdown, setCountdown]     = useState(null)
+  const [featuredIdx, setFeaturedIdx] = useState(0)
+  const [launchOpen, setLaunchOpen]   = useState(false)
 
   const [calEvents, setCalEvents]         = useState([])
   const [loadingEvents, setLoadingEvents] = useState(false)
@@ -94,6 +96,7 @@ function CalendarView({ isActive, pomo, setPomo }) {
   // 月全体のカレンダーイベント (dateKey → events[])
   const [monthCalEvents, setMonthCalEvents] = useState({})
   const [monthCalLoading, setMonthCalLoading] = useState(true)
+  const [showLaunches, setShowLaunches] = useState(true)
 
   const [showSheet, setShowSheet]     = useState(false)
   const [form, setForm]               = useState({ title: '', startTime: '', endTime: '', allDay: true })
@@ -111,15 +114,15 @@ function CalendarView({ isActive, pomo, setPomo }) {
       .catch(() => {})
   }, [])
 
-  const nearestLaunch = launches[0] ?? null
+  const featuredLaunch = launches[featuredIdx] ?? launches[0] ?? null
 
   useEffect(() => {
-    if (!nearestLaunch?.net) return
-    const tick = () => setCountdown(calcCountdown(nearestLaunch.net))
+    if (!featuredLaunch?.net) return
+    const tick = () => setCountdown(calcCountdown(featuredLaunch.net))
     tick()
     const id = setInterval(tick, 1000)
     return () => clearInterval(id)
-  }, [nearestLaunch?.net])
+  }, [featuredLaunch?.net])
 
   const launchesByDate = useMemo(() => {
     const map = {}
@@ -135,24 +138,55 @@ function CalendarView({ isActive, pomo, setPomo }) {
   const year            = viewDate.getFullYear()
   const month           = viewDate.getMonth()
 
-  // 月が変わったら月全体のイベントを取得
+  const monthCacheRef = useRef({})
+
   useEffect(() => {
-    setMonthCalEvents({})
-    setMonthCalLoading(true)
+    const key = `${year}-${month}`
+    const cached = monthCacheRef.current[key]
+    if (cached) {
+      setMonthCalEvents(cached)
+      setMonthCalLoading(false)
+    } else {
+      setMonthCalEvents({})
+      setMonthCalLoading(true)
+    }
     fetch(`/api/calendar/month?year=${year}&month=${month + 1}`)
       .then(res => res.ok ? res.json() : Promise.reject())
-      .then(json => setMonthCalEvents(json))
+      .then(json => {
+        monthCacheRef.current[key] = json
+        setMonthCalEvents(json)
+      })
       .catch(() => {})
       .finally(() => setMonthCalLoading(false))
+
+    const prefetch = (y, m) => {
+      const k = `${y}-${m}`
+      if (monthCacheRef.current[k]) return
+      fetch(`/api/calendar/month?year=${y}&month=${m + 1}`)
+        .then(res => res.ok ? res.json() : Promise.reject())
+        .then(json => { monthCacheRef.current[k] = json })
+        .catch(() => {})
+    }
+    const prev = new Date(year, month - 1, 1)
+    const next = new Date(year, month + 1, 1)
+    prefetch(prev.getFullYear(), prev.getMonth())
+    prefetch(next.getFullYear(), next.getMonth())
   }, [year, month])
 
   const todayKey  = useMemo(() => toJstDateKey(new Date().toISOString()), [])
-  const activeKey = selectedKey ?? (nearestLaunch ? toJstDateKey(nearestLaunch.net) : todayKey)
+  const activeKey = selectedKey ?? (featuredLaunch ? toJstDateKey(featuredLaunch.net) : todayKey)
   const selectedLaunches = launchesByDate[activeKey] ?? []
 
   useEffect(() => {
     activeKeyRef.current = activeKey
     if (!activeKey) return
+
+    const fromMonth = monthCalEvents[activeKey]
+    if (fromMonth) {
+      setCalEvents(fromMonth)
+      setLoadingEvents(false)
+      return
+    }
 
     const cached = eventsCacheRef.current[activeKey]
     if (cached) {
@@ -160,25 +194,9 @@ function CalendarView({ isActive, pomo, setPomo }) {
       setLoadingEvents(false)
     } else {
       setCalEvents([])
-      setLoadingEvents(true)
+      setLoadingEvents(!monthCalLoading)
     }
-
-    fetch(`/api/calendar/date?date=${activeKey}`)
-      .then(res => res.ok ? res.json() : Promise.reject())
-      .then(json => {
-        eventsCacheRef.current[activeKey] = json
-        if (activeKeyRef.current === activeKey) {
-          setCalEvents(json)
-          setLoadingEvents(false)
-        }
-      })
-      .catch(() => {
-        if (activeKeyRef.current === activeKey) {
-          if (!cached) setCalEvents([])
-          setLoadingEvents(false)
-        }
-      })
-  }, [activeKey])
+  }, [activeKey, monthCalEvents, monthCalLoading])
 
   const firstWeekday    = new Date(year, month, 1).getDay()
   const daysInMonth     = new Date(year, month + 1, 0).getDate()
@@ -206,22 +224,24 @@ function CalendarView({ isActive, pomo, setPomo }) {
     for (const [key, events] of Object.entries(monthCalEvents)) {
       map[key] = [...(map[key] || []), ...events.map(e => ({ ...e, _type: 'cal' }))]
     }
-    for (const [key, launches] of Object.entries(launchesByDate)) {
-      map[key] = [
-        ...(map[key] || []),
-        ...launches.map(l => ({
-          uid: l.id,
-          title: l.name,
-          allDay: false,
-          startTime: formatTimeShort(l.net),
-          calendarColor: LAUNCH_COLOR,
-          calendarName: 'Launch',
-          _type: 'launch',
-        })),
-      ]
+    if (showLaunches) {
+      for (const [key, launches] of Object.entries(launchesByDate)) {
+        map[key] = [
+          ...(map[key] || []),
+          ...launches.map(l => ({
+            uid: l.id,
+            title: l.name,
+            allDay: false,
+            startTime: formatTimeShort(l.net),
+            calendarColor: LAUNCH_COLOR,
+            calendarName: 'Launch',
+            _type: 'launch',
+          })),
+        ]
+      }
     }
     return map
-  }, [monthCalEvents, launchesByDate])
+  }, [monthCalEvents, launchesByDate, showLaunches])
 
   const changeMonth = delta => setViewDate(new Date(year, month + delta, 1))
 
@@ -288,62 +308,8 @@ function CalendarView({ isActive, pomo, setPomo }) {
   return (
     <div className="calendar-view">
 
-      {/* 左パネル: 打ち上げ情報 + アジェンダ */}
+      {/* 左パネル: アジェンダ（上）+ 打ち上げ情報（下） */}
       <div className="cal-left">
-
-        {nearestLaunch && (
-          <div className="cal-next-launch">
-            {nearestLaunch.imageUrl && (
-              <img src={nearestLaunch.imageUrl} alt="" className="cal-next-launch-img" />
-            )}
-            <div className="cal-next-launch-overlay" />
-            <div className="cal-next-launch-body">
-              <div className="cal-pc-countdown">
-                <p className="cal-countdown-label">T − MINUS</p>
-                {countdown && !countdown.launched && (
-                  <div className="countdown">
-                    <div className="countdown-unit">
-                      <span className="countdown-num">{pad2(countdown.days)}</span>
-                      <span className="countdown-lbl">DAYS</span>
-                    </div>
-                    <span className="countdown-sep">:</span>
-                    <div className="countdown-unit">
-                      <span className="countdown-num">{pad2(countdown.hours)}</span>
-                      <span className="countdown-lbl">HOURS</span>
-                    </div>
-                    <span className="countdown-sep">:</span>
-                    <div className="countdown-unit">
-                      <span className="countdown-num">{pad2(countdown.minutes)}</span>
-                      <span className="countdown-lbl">MINS</span>
-                    </div>
-                    <span className="countdown-sep">:</span>
-                    <div className="countdown-unit">
-                      <span className="countdown-num countdown-num--sec">{pad2(countdown.seconds)}</span>
-                      <span className="countdown-lbl">SECS</span>
-                    </div>
-                  </div>
-                )}
-                {countdown?.launched && (
-                  <p className="countdown-launched">LAUNCHED</p>
-                )}
-              </div>
-
-              <div className="cal-next-launch-info">
-                <p className="cal-next-launch-label">NEXT LAUNCH</p>
-                <p className="cal-next-launch-name">{nearestLaunch.name}</p>
-                <p className="cal-next-launch-meta">{formatLaunchDate(nearestLaunch.net)}</p>
-                {nearestLaunch.locationName && (
-                  <p className="cal-next-launch-meta">{nearestLaunch.locationName}</p>
-                )}
-                {nearestLaunch.webcastUrl && (
-                  <a className="cal-webcast-link" href={nearestLaunch.webcastUrl} target="_blank" rel="noreferrer">
-                    ▶ ライブ配信を見る
-                  </a>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
 
         <div className="calendar-agenda">
           <div className="cal-agenda-header">
@@ -397,6 +363,90 @@ function CalendarView({ isActive, pomo, setPomo }) {
 
           <div className="cal-agenda-spacer" />
         </div>
+
+        {featuredLaunch && (
+          <div className={`cal-launch-accordion${launchOpen ? ' open' : ''}`}>
+            <button
+              className="cal-launch-accordion-header"
+              onClick={() => setLaunchOpen(o => !o)}
+            >
+              <span className="cal-launch-accordion-icon">🚀</span>
+              <span className="cal-launch-accordion-title">{featuredLaunch.name}</span>
+              <span className="cal-launch-accordion-arrow">{launchOpen ? '▾' : '▸'}</span>
+            </button>
+
+            {launchOpen && (
+              <div className="cal-launch-accordion-body">
+                <div className="cal-next-launch">
+                  {featuredLaunch.imageUrl && (
+                    <img src={featuredLaunch.imageUrl} alt="" className="cal-next-launch-img" />
+                  )}
+                  <div className="cal-next-launch-overlay" />
+                  <div className="cal-next-launch-body">
+                    <div className="cal-pc-countdown">
+                      <p className="cal-countdown-label">T − MINUS</p>
+                      {countdown && !countdown.launched && (
+                        <div className="countdown">
+                          <div className="countdown-unit">
+                            <span className="countdown-num">{pad2(countdown.days)}</span>
+                            <span className="countdown-lbl">DAYS</span>
+                          </div>
+                          <span className="countdown-sep">:</span>
+                          <div className="countdown-unit">
+                            <span className="countdown-num">{pad2(countdown.hours)}</span>
+                            <span className="countdown-lbl">HOURS</span>
+                          </div>
+                          <span className="countdown-sep">:</span>
+                          <div className="countdown-unit">
+                            <span className="countdown-num">{pad2(countdown.minutes)}</span>
+                            <span className="countdown-lbl">MINS</span>
+                          </div>
+                          <span className="countdown-sep">:</span>
+                          <div className="countdown-unit">
+                            <span className="countdown-num countdown-num--sec">{pad2(countdown.seconds)}</span>
+                            <span className="countdown-lbl">SECS</span>
+                          </div>
+                        </div>
+                      )}
+                      {countdown?.launched && (
+                        <p className="countdown-launched">LAUNCHED</p>
+                      )}
+                    </div>
+
+                    <div className="cal-next-launch-info">
+                      <p className="cal-next-launch-label">NEXT LAUNCH</p>
+                      <p className="cal-next-launch-name">{featuredLaunch.name}</p>
+                      <p className="cal-next-launch-meta">{formatLaunchDate(featuredLaunch.net)}</p>
+                      {featuredLaunch.locationName && (
+                        <p className="cal-next-launch-meta">{featuredLaunch.locationName}</p>
+                      )}
+                      {featuredLaunch.webcastUrl && (
+                        <a className="cal-webcast-link" href={featuredLaunch.webcastUrl} target="_blank" rel="noreferrer">
+                          ▶ ライブ配信を見る
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {launches.length > 1 && (
+                  <div className="cal-launch-list">
+                    {launches.map((l, i) => (
+                      <button
+                        key={l.id}
+                        className={`cal-launch-item${i === featuredIdx ? ' active' : ''}`}
+                        onClick={() => setFeaturedIdx(i)}
+                      >
+                        <span className="cal-launch-item-name">{l.name}</span>
+                        <span className="cal-launch-item-date">{formatLaunchDate(l.net)}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* 右パネル: 月グリッド (PC: インライン表示) */}
@@ -420,6 +470,15 @@ function CalendarView({ isActive, pomo, setPomo }) {
               <button onClick={() => changeMonth(1)}  aria-label="次の月">›</button>
             </div>
           </div>
+          <label className="cal-toggle">
+            <input
+              type="checkbox"
+              checked={showLaunches}
+              onChange={e => setShowLaunches(e.target.checked)}
+            />
+            <span className="cal-toggle-dot" style={{ background: LAUNCH_COLOR }} />
+            <span className="cal-toggle-label">打ち上げ予定</span>
+          </label>
           <div className="weekdays">
             {WEEKDAYS.map(w => <div key={w}>{w}</div>)}
           </div>

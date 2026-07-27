@@ -63,6 +63,10 @@ public class AppleCalendarService {
     private record CachedEvents(List<CalendarEventDto> events, long cachedAt) {}
     private final Map<LocalDate, CachedEvents> eventsCache = new ConcurrentHashMap<>();
 
+    private static final long MONTH_EVENTS_TTL_MS = 2 * 60 * 1000;
+    private record CachedMonthEvents(Map<String, List<CalendarEventDto>> events, long cachedAt) {}
+    private final Map<YearMonth, CachedMonthEvents> monthEventsCache = new ConcurrentHashMap<>();
+
     public List<CalendarEventDto> getTodayEvents() {
         return getEventsForDate(LocalDate.now(JST));
     }
@@ -111,20 +115,56 @@ public class AppleCalendarService {
         if (username.isBlank() || password.isBlank()) return Map.of();
 
         YearMonth ym = YearMonth.of(year, month);
-        Map<String, List<CalendarEventDto>> result = new ConcurrentHashMap<>();
-        List<CompletableFuture<Void>> futures = IntStream.rangeClosed(1, ym.lengthOfMonth())
-            .mapToObj(d -> {
-                LocalDate date = LocalDate.of(year, month, d);
-                return CompletableFuture.runAsync(() -> {
-                    try {
-                        List<CalendarEventDto> events = getEventsForDate(date);
-                        if (!events.isEmpty()) result.put(date.toString(), events);
-                    } catch (Exception ignored) {}
-                });
-            })
-            .toList();
-        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
-        return result;
+
+        CachedMonthEvents cached = monthEventsCache.get(ym);
+        if (cached != null && (System.currentTimeMillis() - cached.cachedAt()) < MONTH_EVENTS_TTL_MS) {
+            return cached.events();
+        }
+
+        try (CloseableHttpClient client = buildHttpClient()) {
+            List<CollectionInfo> collections = getCachedCollections(client);
+            if (collections.isEmpty()) return Map.of();
+
+            Map<String, List<CalendarEventDto>> result = new ConcurrentHashMap<>();
+            List<CompletableFuture<Void>> futures = IntStream.rangeClosed(1, ym.lengthOfMonth())
+                .mapToObj(d -> {
+                    LocalDate date = LocalDate.of(year, month, d);
+                    return CompletableFuture.runAsync(() -> {
+                        try {
+                            Map<String, CalendarEventDto> eventMap = new ConcurrentHashMap<>();
+                            List<CompletableFuture<Void>> colFutures = collections.stream()
+                                .map(info -> CompletableFuture.runAsync(() -> {
+                                    try {
+                                        for (CalendarEventDto e : queryDay(client, info, date)) {
+                                            eventMap.putIfAbsent(e.getUid(), e);
+                                        }
+                                    } catch (Exception ex) {
+                                        log.warn("CalDAV query failed for {} on {}: {}", info.url(), date, ex.getMessage());
+                                    }
+                                }))
+                                .toList();
+                            CompletableFuture.allOf(colFutures.toArray(new CompletableFuture[0])).join();
+
+                            if (!eventMap.isEmpty()) {
+                                List<CalendarEventDto> events = new ArrayList<>(eventMap.values());
+                                events.sort(Comparator.comparing(e -> e.getStartTime() == null ? "" : e.getStartTime()));
+                                result.put(date.toString(), events);
+                                eventsCache.put(date, new CachedEvents(events, System.currentTimeMillis()));
+                            }
+                        } catch (Exception ignored) {}
+                    });
+                })
+                .toList();
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+
+            Map<String, List<CalendarEventDto>> immutableResult = Map.copyOf(result);
+            monthEventsCache.put(ym, new CachedMonthEvents(immutableResult, System.currentTimeMillis()));
+            return immutableResult;
+
+        } catch (Exception e) {
+            log.error("Apple Calendar month fetch failed: {}", e.getMessage());
+            return Map.of();
+        }
     }
 
     public void createEvent(CalendarEventCreateDto dto) throws Exception {
@@ -193,6 +233,7 @@ public class AppleCalendarService {
         }
 
         eventsCache.remove(date);
+        monthEventsCache.remove(YearMonth.from(date));
     }
 
     // ── コレクション探索（キャッシュ付き） ───────────────
@@ -329,6 +370,42 @@ public class AppleCalendarService {
         return events;
     }
 
+    private List<CalendarEventDto> queryRange(CloseableHttpClient client, CollectionInfo info,
+                                               LocalDate from, LocalDate to) throws Exception {
+        DateTimeFormatter utcFmt = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'");
+        String start = from.atStartOfDay(JST).withZoneSameInstant(ZoneId.of("UTC")).format(utcFmt);
+        String end   = to.atStartOfDay(JST).withZoneSameInstant(ZoneId.of("UTC")).format(utcFmt);
+
+        String body = String.format("""
+            <?xml version="1.0" encoding="utf-8"?>
+            <c:calendar-query xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
+              <d:prop>
+                <d:getetag/>
+                <c:calendar-data/>
+              </d:prop>
+              <c:filter>
+                <c:comp-filter name="VCALENDAR">
+                  <c:comp-filter name="VEVENT">
+                    <c:time-range start="%s" end="%s"/>
+                  </c:comp-filter>
+                </c:comp-filter>
+              </c:filter>
+            </c:calendar-query>
+            """, start, end);
+
+        String xml = sendWebDav(client, "REPORT", info.url(), body, "1");
+        if (xml == null) return List.of();
+
+        List<CalendarEventDto> events = new ArrayList<>();
+        Document doc = parseXml(xml);
+        NodeList dataNodes = doc.getElementsByTagNameNS("urn:ietf:params:xml:ns:caldav", "calendar-data");
+        for (int i = 0; i < dataNodes.getLength(); i++) {
+            String icsData = dataNodes.item(i).getTextContent();
+            events.addAll(parseIcs(icsData, info.displayName(), info.color()));
+        }
+        return events;
+    }
+
     // ── iCalendar パース ─────────────────────────────
 
     private List<CalendarEventDto> parseIcs(String icsData, String calendarName, String calendarColor) {
@@ -350,12 +427,20 @@ public class AppleCalendarService {
                 boolean allDay = !(dtStart.getDate() instanceof DateTime);
 
                 String startTime = null;
-                if (!allDay) {
+                String dateKey;
+                if (allDay) {
+                    dateKey = LocalDate.of(
+                        dtStart.getDate().toInstant().atZone(JST).getYear(),
+                        dtStart.getDate().toInstant().atZone(JST).getMonthValue(),
+                        dtStart.getDate().toInstant().atZone(JST).getDayOfMonth()
+                    ).toString();
+                } else {
                     ZonedDateTime zdt = dtStart.getDate().toInstant().atZone(JST);
                     startTime = zdt.format(TIME_FMT);
+                    dateKey = zdt.toLocalDate().toString();
                 }
 
-                result.add(new CalendarEventDto(uid, title, startTime, null, allDay, calendarName, calendarColor));
+                result.add(new CalendarEventDto(uid, title, startTime, null, allDay, calendarName, calendarColor, dateKey));
             }
         } catch (Exception e) {
             log.warn("iCalendar parse error: {}", e.getMessage());
