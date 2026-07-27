@@ -827,6 +827,9 @@ body {
 .cal-left  { order: 2; display: flex; flex-direction: column; }
 .cal-right { order: 1; }
 
+/* 打ち上げアコーディオン (モバイルは非表示、PCのみ) */
+.cal-launch-accordion { display: none; }
+
 /* =====================
    PC: ミッションコントロールレイアウト
    ===================== */
