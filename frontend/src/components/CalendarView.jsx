@@ -174,7 +174,7 @@ function CalendarView({ isActive, pomo, setPomo }) {
   }, [year, month])
 
   const todayKey  = useMemo(() => toJstDateKey(new Date().toISOString()), [])
-  const activeKey = selectedKey ?? (featuredLaunch ? toJstDateKey(featuredLaunch.net) : todayKey)
+  const activeKey = selectedKey ?? todayKey
   const selectedLaunches = launchesByDate[activeKey] ?? []
 
   useEffect(() => {
@@ -201,11 +201,6 @@ function CalendarView({ isActive, pomo, setPomo }) {
   const firstWeekday    = new Date(year, month, 1).getDay()
   const daysInMonth     = new Date(year, month + 1, 0).getDate()
   const daysInPrevMonth = new Date(year, month, 0).getDate()
-
-  const todayDate          = useMemo(() => new Date(), [])
-  const todayYear          = todayDate.getFullYear()
-  const todayMonth         = todayDate.getMonth()
-  const isViewingOtherMonth = year !== todayYear || month !== todayMonth
 
   const cells = []
   for (let i = firstWeekday - 1; i >= 0; i--) {
@@ -244,6 +239,20 @@ function CalendarView({ isActive, pomo, setPomo }) {
   }, [monthCalEvents, launchesByDate, showLaunches])
 
   const changeMonth = delta => setViewDate(new Date(year, month + delta, 1))
+
+  const jumpToToday = () => {
+    setViewDate(new Date())
+    setSelectedKey(todayKey)
+  }
+
+  const jumpToLaunch = () => {
+    if (!featuredLaunch?.net) return
+    const key = toJstDateKey(featuredLaunch.net)
+    if (!key) return
+    const [y, m] = key.split('-').map(Number)
+    setViewDate(new Date(y, m - 1, 1))
+    setSelectedKey(key)
+  }
 
   const openSheet = () => {
     setForm({ title: '', startTime: '', endTime: '', allDay: true })
@@ -458,12 +467,20 @@ function CalendarView({ isActive, pomo, setPomo }) {
               {month + 1}月
             </div>
             <div className="cal-nav">
-              {isViewingOtherMonth && (
+              {featuredLaunch?.net && toJstDateKey(featuredLaunch.net) !== activeKey && (
+                <button
+                  className="cal-today-btn cal-launch-jump-btn"
+                  onClick={jumpToLaunch}
+                >
+                  Next Rancher
+                </button>
+              )}
+              {activeKey !== todayKey && (
                 <button
                   className="cal-today-btn"
-                  onClick={() => { setViewDate(new Date()); setSelectedKey(todayKey) }}
+                  onClick={jumpToToday}
                 >
-                  今日
+                  ToDay
                 </button>
               )}
               <button onClick={() => changeMonth(-1)} aria-label="前の月">‹</button>

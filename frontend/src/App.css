@@ -1600,6 +1600,17 @@ body {
   background: rgba(var(--accent), 0.22);
 }
 
+/* 「次の発射」ジャンプボタン */
+.cal-launch-jump-btn {
+  color: #e06a3a;
+  background: rgba(224, 106, 58, 0.12);
+  border-color: rgba(224, 106, 58, 0.35);
+}
+
+.cal-launch-jump-btn:hover {
+  background: rgba(224, 106, 58, 0.22);
+}
+
 /* アジェンダ行: 左カラーバー */
 .cal-row--event {
   position: relative;
