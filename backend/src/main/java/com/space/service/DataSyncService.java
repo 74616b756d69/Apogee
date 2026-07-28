@@ -15,6 +15,8 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 
 /**
  * Space Launch Now API からデータを取得し MySQL に保存するサービス
@@ -68,8 +70,14 @@ public class DataSyncService {
             List<Launch> launches = response.getResults().stream()
                     .map(r -> mapToLaunch(r, true))
                     .toList();
-            launchRepository.saveAll(launches);
-            log.info("Synced {} upcoming launches.", launches.size());
+            List<Launch> changed = filterChangedLaunches(launches);
+            if (changed.isEmpty()) {
+                log.info("No upcoming launch changes detected — skipping save.");
+                return;
+            }
+            launchRepository.saveAll(changed);
+            log.info("Synced {} upcoming launches ({} unchanged, skipped).",
+                    changed.size(), launches.size() - changed.size());
 
         } catch (Exception e) {
             log.error("Failed to sync upcoming launches: {}", e.getMessage());
@@ -84,8 +92,14 @@ public class DataSyncService {
             List<Launch> launches = response.getResults().stream()
                     .map(r -> mapToLaunch(r, false))
                     .toList();
-            launchRepository.saveAll(launches);
-            log.info("Synced {} previous launches.", launches.size());
+            List<Launch> changed = filterChangedLaunches(launches);
+            if (changed.isEmpty()) {
+                log.info("No previous launch changes detected — skipping save.");
+                return;
+            }
+            launchRepository.saveAll(changed);
+            log.info("Synced {} previous launches ({} unchanged, skipped).",
+                    changed.size(), launches.size() - changed.size());
 
         } catch (Exception e) {
             log.error("Failed to sync previous launches: {}", e.getMessage());
@@ -100,12 +114,62 @@ public class DataSyncService {
             List<Agency> agencies = response.getResults().stream()
                     .map(this::mapToAgency)
                     .toList();
-            agencyRepository.saveAll(agencies);
-            log.info("Synced {} agencies.", agencies.size());
+            List<Agency> changed = filterChangedAgencies(agencies);
+            if (changed.isEmpty()) {
+                log.info("No agency changes detected — skipping save.");
+                return;
+            }
+            agencyRepository.saveAll(changed);
+            log.info("Synced {} agencies ({} unchanged, skipped).",
+                    changed.size(), agencies.size() - changed.size());
 
         } catch (Exception e) {
             log.error("Failed to sync agencies: {}", e.getMessage());
         }
+    }
+
+    // =========================================================
+    // 差分検出
+    // =========================================================
+
+    private List<Launch> filterChangedLaunches(List<Launch> incoming) {
+        List<String> ids = incoming.stream().map(Launch::getId).toList();
+        Map<String, Launch> existing = launchRepository.findAllById(ids).stream()
+                .collect(java.util.stream.Collectors.toMap(Launch::getId, l -> l));
+
+        return incoming.stream().filter(neo -> {
+            Launch old = existing.get(neo.getId());
+            if (old == null) return true;
+            return !Objects.equals(old.getName(), neo.getName())
+                || !Objects.equals(old.getStatusName(), neo.getStatusName())
+                || !Objects.equals(old.getNet(), neo.getNet())
+                || !Objects.equals(old.getRocketName(), neo.getRocketName())
+                || !Objects.equals(old.getMissionName(), neo.getMissionName())
+                || !Objects.equals(old.getMissionDescription(), neo.getMissionDescription())
+                || !Objects.equals(old.getMissionType(), neo.getMissionType())
+                || !Objects.equals(old.getPadName(), neo.getPadName())
+                || !Objects.equals(old.getLocationName(), neo.getLocationName())
+                || !Objects.equals(old.getWebcastUrl(), neo.getWebcastUrl())
+                || old.isUpcoming() != neo.isUpcoming();
+        }).toList();
+    }
+
+    private List<Agency> filterChangedAgencies(List<Agency> incoming) {
+        List<Integer> ids = incoming.stream().map(Agency::getId).toList();
+        Map<Integer, Agency> existing = agencyRepository.findAllById(ids).stream()
+                .collect(java.util.stream.Collectors.toMap(Agency::getId, a -> a));
+
+        return incoming.stream().filter(neo -> {
+            Agency old = existing.get(neo.getId());
+            if (old == null) return true;
+            return !Objects.equals(old.getName(), neo.getName())
+                || !Objects.equals(old.getAbbrev(), neo.getAbbrev())
+                || !Objects.equals(old.getType(), neo.getType())
+                || !Objects.equals(old.getCountryCode(), neo.getCountryCode())
+                || !Objects.equals(old.getDescription(), neo.getDescription())
+                || !Objects.equals(old.getImageUrl(), neo.getImageUrl())
+                || !Objects.equals(old.getLogoUrl(), neo.getLogoUrl());
+        }).toList();
     }
 
     // =========================================================

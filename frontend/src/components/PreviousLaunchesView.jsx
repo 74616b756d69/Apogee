@@ -69,7 +69,7 @@ function PreviousLaunchesView({ launches, loading, error }) {
               <div className="launch-thumb launch-thumb--img">
                 {launch.imageUrl
                   ? <img src={launch.imageUrl} alt="" className="launch-row-img" onError={e => { e.target.style.display = 'none' }} />
-                  : <span>🚀</span>
+                  : <span className="launch-thumb-icon">&#9650;</span>
                 }
               </div>
               <div className="launch-info">

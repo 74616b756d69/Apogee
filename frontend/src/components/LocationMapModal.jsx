@@ -33,7 +33,6 @@ function NewsSection({ launchId }) {
 
   useEffect(() => {
     let cancelled = false
-    setArticles(null)
     fetch(`/api/launches/${launchId}/news`)
       .then(r => r.ok ? r.json() : Promise.reject())
       .then(json => { if (!cancelled) setArticles(json) })
@@ -90,7 +89,7 @@ function LocationMapModal({ launch, onClose }) {
     <div className="map-modal-overlay" onClick={onClose}>
       <div className="map-modal" onClick={e => e.stopPropagation()}>
         <div className="map-modal-header">
-          <span className="map-modal-title">📍 {padName || locationName}</span>
+          <span className="map-modal-title">{padName || locationName}</span>
           <button className="map-modal-close" onClick={onClose} aria-label="閉じる">×</button>
         </div>
 
@@ -112,11 +111,11 @@ function LocationMapModal({ launch, onClose }) {
 
           {/* メタ情報 */}
           <ul className="map-modal-meta">
-            {formatDate(net)                                 && <li>📅 {formatDate(net)}</li>}
-            {rocketName                                      && <li>🚀 {rocketName}</li>}
-            {missionType                                     && <li>🎯 {missionType}</li>}
-            {statusName                                      && <li>🛰️ {statusName}</li>}
-            {locationName && locationName !== padName        && <li>📍 {locationName}</li>}
+            {formatDate(net)                                 && <li>{formatDate(net)}</li>}
+            {rocketName                                      && <li>{rocketName}</li>}
+            {missionType                                     && <li>{missionType}</li>}
+            {statusName                                      && <li>{statusName}</li>}
+            {locationName && locationName !== padName        && <li>{locationName}</li>}
           </ul>
 
           {missionDescription && (

@@ -26,8 +26,8 @@ function AgencyCard({ agency }) {
         </div>
 
         <ul className="card-meta">
-          {agency.type        && <li>🏛️ {agency.type}</li>}
-          {agency.countryCode && <li>🌍 {agency.countryCode}</li>}
+          {agency.type        && <li>{agency.type}</li>}
+          {agency.countryCode && <li>{agency.countryCode}</li>}
         </ul>
 
         {desc && <p className="card-desc">{desc}</p>}

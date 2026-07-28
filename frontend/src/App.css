@@ -827,6 +827,9 @@ body {
 .cal-left  { order: 2; display: flex; flex-direction: column; }
 .cal-right { order: 1; }
 
+/* 打ち上げアコーディオン (モバイルは非表示、PCのみ) */
+.cal-launch-accordion { display: none; }
+
 /* =====================
    PC: ミッションコントロールレイアウト
    ===================== */
@@ -857,16 +860,64 @@ body {
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
-    padding: 40px 56px;
-    overflow-y: auto;
+    justify-content: flex-start;
+    padding: 20px 32px;
+    overflow: hidden;
     background: rgba(8, 14, 26, 0.6);
   }
 
-  /* 左: ヒーローが残り高さを全部占める */
-  .cal-left .cal-next-launch {
+  /* 左: 打ち上げアコーディオン */
+  .cal-launch-accordion {
+    flex-shrink: 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    max-height: 50vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .cal-launch-accordion-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 10px 16px;
+    background: none;
+    border: none;
+    color: #c8daea;
+    font-size: 0.78rem;
+    font-family: inherit;
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .cal-launch-accordion-header:hover {
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  .cal-launch-accordion-icon {
+    font-size: 0.9rem;
+  }
+
+  .cal-launch-accordion-title {
     flex: 1;
-    height: auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .cal-launch-accordion-arrow {
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.4);
+  }
+
+  .cal-launch-accordion-body {
+    overflow-y: auto;
+    min-height: 0;
+  }
+
+  .cal-launch-accordion-body .cal-next-launch {
+    height: 280px;
   }
 
   .cal-left .cal-next-launch-img {
@@ -1055,41 +1106,114 @@ body {
     background: rgba(var(--accent), 0.24);
   }
 
-  /* 左: アジェンダ — 固定高さ、スクロール可能 */
+  /* 左: アジェンダ — 残り高さを占めてスクロール */
   .cal-left .calendar-agenda {
-    flex: none;
-    height: 190px;
+    flex: 1;
+    min-height: 0;
     overflow-y: auto;
-    border-top: 1px solid rgba(100, 160, 255, 0.10);
     background: rgba(4, 8, 16, 0.97);
-    padding: 10px 20px 12px;
+    padding: 14px 20px 12px;
   }
 
   .cal-left .cal-agenda-header {
     margin-bottom: 8px;
   }
 
-  /* 右: カレンダーパネル — 最大幅・透明背景 */
+  /* 右: カレンダーパネル — 高さを埋めてグリッドを活かす */
   .cal-right .calendar-panel {
     width: 100%;
-    max-width: 560px;
+    max-width: 800px;
     background: transparent;
     border: none;
     padding: 0;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
   }
 
   /* 右: 日付文字・円を PC サイズに */
   .cal-right .cal-day .num {
-    font-size: 0.90rem;
+    font-size: 0.88rem;
+  }
+
+  /* PC: グリッド行に高さを任せ、セル自体は伸縮 */
+  .cal-right .cal-day {
+    aspect-ratio: unset;
+    height: auto;
+    min-height: 0;
+    align-items: flex-start;
+    justify-content: flex-start;
+    padding: 6px 4px 4px;
+    gap: 2px;
+    overflow: hidden;
   }
 
   .cal-right .cal-day-circle {
-    width: 70%;
+    width: 22px;
+    height: 22px;
+    min-width: 22px;
+    min-height: 22px;
+    aspect-ratio: unset;
+    flex-shrink: 0;
+    align-self: flex-start;
   }
 
-  /* FAB: 左パネル下部 (アジェンダ190 + ポモドーロ〜68px の上) */
+  /* PC: ドットは非表示、インラインイベントを表示 */
+  .cal-right .launch-dot-row {
+    display: none;
+  }
+
+  .cal-right .cal-inline-event {
+    display: block;
+    width: 100%;
+    font-size: 0.62rem;
+    line-height: 1.35;
+    padding: 1px 4px 1px 5px;
+    border-radius: 0 3px 3px 0;
+    border-left: 2px solid;
+    background: rgba(255, 255, 255, 0.06);
+    color: rgba(220, 232, 245, 0.85);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .cal-right .cal-day.selected .cal-inline-event {
+    background: rgba(var(--accent), 0.12);
+    color: rgba(220, 232, 245, 0.90);
+  }
+
+  .cal-right .cal-inline-more {
+    display: block;
+    font-size: 0.58rem;
+    color: rgba(255, 255, 255, 0.30);
+    padding-left: 5px;
+    line-height: 1.2;
+  }
+
+  .cal-right .cal-day.selected .cal-inline-more {
+    color: rgba(255, 255, 255, 0.35);
+  }
+
+  /* スケルトンプレースホルダー */
+  .cal-right .cal-inline-skeleton {
+    display: block;
+    width: 80%;
+    height: 11px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.07);
+  }
+
+  .cal-right .cal-inline-skeleton--short {
+    width: 55%;
+  }
+
+  /* FAB: 左パネル下部 */
   .cal-fab {
-    bottom: 268px;
+    bottom: 50px;
     right: auto;
     left: calc(340px - 66px);
   }
@@ -1229,6 +1353,17 @@ body {
   padding: 2px 0 8px;
 }
 
+/* PC: グリッドが残り高さを埋める */
+@media (min-width: 768px) {
+  .cal-right .cal-grid {
+    flex: 1;
+    min-height: 0;
+    grid-auto-rows: 1fr;
+    align-content: stretch;
+    padding: 2px 0 0;
+  }
+}
+
 .cal-day {
   aspect-ratio: 1;
   display: flex;
@@ -1304,6 +1439,119 @@ body {
   background: rgba(4, 16, 31, 0.55);
 }
 
+/* カレンダートグル: モバイルでは非表示 */
+.cal-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  user-select: none;
+  padding: 0 2px 4px;
+}
+
+.cal-toggle input {
+  display: none;
+}
+
+.cal-toggle-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  opacity: 1;
+  transition: opacity 0.15s;
+}
+
+.cal-toggle input:not(:checked) ~ .cal-toggle-dot {
+  opacity: 0.25;
+}
+
+.cal-toggle-label {
+  font-size: 0.68rem;
+  color: rgba(255, 255, 255, 0.45);
+  transition: color 0.15s;
+}
+
+.cal-toggle input:checked ~ .cal-toggle-label {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* インラインイベントチップ: モバイルでは非表示 */
+.cal-inline-event {
+  display: none;
+}
+
+.cal-inline-more {
+  display: none;
+}
+
+/* スケルトン: モバイルでは非表示 */
+.cal-inline-skeleton {
+  display: none;
+}
+
+/* アコーディオン内: 打ち上げリスト */
+.cal-launch-list {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .cal-launch-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 4px 8px 10px;
+    max-height: 140px;
+    overflow-y: auto;
+  }
+
+  .cal-launch-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 6px 10px;
+    background: none;
+    border: none;
+    border-radius: 6px;
+    color: rgba(200, 218, 234, 0.7);
+    font-size: 0.72rem;
+    font-family: inherit;
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .cal-launch-item:hover {
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  .cal-launch-item.active {
+    background: rgba(var(--accent), 0.12);
+    color: rgba(200, 218, 234, 0.95);
+  }
+
+  .cal-launch-item-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .cal-launch-item-date {
+    flex-shrink: 0;
+    font-size: 0.65rem;
+    color: rgba(255, 255, 255, 0.35);
+  }
+}
+
+/* カレンダー名ラベル (アジェンダ) */
+.cal-event-cal-name {
+  font-size: 0.62rem;
+  color: rgba(255, 255, 255, 0.35);
+  margin-left: 2px;
+}
+
 /* 選択した日のアジェンダ */
 .calendar-agenda {
   padding: 20px 20px 8px;
@@ -1344,6 +1592,17 @@ body {
 
 .cal-today-btn:hover {
   background: rgba(var(--accent), 0.22);
+}
+
+/* 「次の発射」ジャンプボタン */
+.cal-launch-jump-btn {
+  color: #e06a3a;
+  background: rgba(224, 106, 58, 0.12);
+  border-color: rgba(224, 106, 58, 0.35);
+}
+
+.cal-launch-jump-btn:hover {
+  background: rgba(224, 106, 58, 0.22);
 }
 
 /* アジェンダ行: 左カラーバー */
@@ -1398,8 +1657,13 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(232, 192, 96, 0.16);
+  background: rgba(var(--accent), 0.12);
   font-size: 16px;
+}
+
+.launch-thumb-icon {
+  font-size: 12px;
+  color: rgba(var(--accent), 0.7);
 }
 
 .launch-info {
@@ -1539,14 +1803,18 @@ body {
   z-index: 80;
   display: flex;
   align-items: flex-end;
+  justify-content: center;
 }
 
 .cal-sheet {
   width: 100%;
+  max-width: 480px;
   background: #0d1829;
   border-radius: 20px 20px 0 0;
   padding: 12px 20px calc(32px + env(safe-area-inset-bottom));
-  border-top: 1px solid rgba(100, 160, 255, 0.2);
+  border-top: 1px solid rgba(100, 160, 255, 0.15);
+  max-height: 85vh;
+  overflow-y: auto;
 }
 
 .cal-sheet-handle {
@@ -1554,27 +1822,63 @@ body {
   height: 4px;
   background: rgba(255, 255, 255, 0.16);
   border-radius: 2px;
-  margin: 0 auto 16px;
+  margin: 0 auto 12px;
 }
 
-.cal-sheet-date {
-  font-size: 0.75rem;
+.cal-sheet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+
+.cal-sheet-title {
+  font-size: 1.05rem;
   font-weight: 700;
-  letter-spacing: 0.06em;
-  color: rgba(var(--accent), 0.8);
-  margin-bottom: 14px;
+  color: #dce8f5;
+}
+
+.cal-sheet-close {
+  background: none;
+  border: none;
+  color: #5a7a9a;
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: color 0.15s, background 0.15s;
+}
+
+.cal-sheet-close:hover {
+  color: #dce8f5;
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .cal-form {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
+}
+
+.cal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cal-field-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #6a88a8;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 2px;
 }
 
 .cal-input {
   width: 100%;
   background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(100, 160, 255, 0.2);
+  border: 1px solid rgba(100, 160, 255, 0.15);
   border-radius: 10px;
   padding: 12px 14px;
   color: #dce8f5;
@@ -1582,6 +1886,7 @@ body {
   font-family: inherit;
   outline: none;
   box-sizing: border-box;
+  transition: border-color 0.15s;
 }
 
 .cal-input:focus {
@@ -1592,30 +1897,143 @@ body {
   color: #4a6480;
 }
 
+.cal-input--title {
+  font-size: 1.05rem;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(100, 160, 255, 0.1);
+}
+
+.cal-input--date {
+  color-scheme: dark;
+  padding: 10px 14px;
+}
+
 .cal-input--time {
   padding: 10px 12px;
   color-scheme: dark;
+  flex: 1;
 }
 
-.cal-checkbox-row {
+/* カレンダー選択チップ */
+.cal-collection-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.cal-collection-chip {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 20px;
+  border: 1px solid rgba(100, 160, 255, 0.15);
+  background: rgba(255, 255, 255, 0.04);
   color: #7a93b0;
-  font-size: 0.9rem;
+  font-size: 0.82rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.cal-collection-chip:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #dce8f5;
+}
+
+.cal-collection-chip.active {
+  background: rgba(var(--accent), 0.12);
+  border-color: rgba(var(--accent), 0.5);
+  color: rgba(var(--accent), 1);
+}
+
+.cal-collection-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* 終日トグルスイッチ */
+.cal-allday-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.cal-toggle-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   cursor: pointer;
   user-select: none;
 }
 
+.cal-toggle-switch input {
+  display: none;
+}
+
+.cal-toggle-track {
+  width: 40px;
+  height: 22px;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.12);
+  position: relative;
+  transition: background 0.2s;
+}
+
+.cal-toggle-track::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #5a7a9a;
+  transition: transform 0.2s, background 0.2s;
+}
+
+.cal-toggle-switch input:checked + .cal-toggle-track {
+  background: rgba(var(--accent), 0.35);
+}
+
+.cal-toggle-switch input:checked + .cal-toggle-track::after {
+  transform: translateX(18px);
+  background: rgba(var(--accent), 1);
+}
+
+.cal-toggle-text {
+  font-size: 0.85rem;
+  color: #7a93b0;
+}
+
+/* 時間入力 */
 .cal-time-row {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.cal-time-sep {
-  color: #6a88a8;
+.cal-time-field {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cal-time-label {
+  font-size: 0.7rem;
+  color: #5a7a9a;
+  letter-spacing: 0.04em;
+}
+
+.cal-time-arrow {
+  color: #4a6480;
   flex-shrink: 0;
+  padding-top: 16px;
 }
 
 .cal-error {
@@ -1624,7 +2042,7 @@ body {
 }
 
 .cal-submit-btn {
-  padding: 13px;
+  padding: 14px;
   border-radius: 12px;
   background: rgba(var(--accent), 1);
   border: none;
@@ -1633,8 +2051,12 @@ body {
   font-weight: 700;
   font-family: inherit;
   cursor: pointer;
-  transition: opacity 0.15s ease;
-  margin-top: 2px;
+  transition: opacity 0.15s ease, transform 0.1s ease;
+  margin-top: 4px;
+}
+
+.cal-submit-btn:active {
+  transform: scale(0.97);
 }
 
 .cal-submit-btn:disabled {
@@ -2442,4 +2864,174 @@ body {
 .webcast-btn-icon {
   font-size: 0.9rem;
   flex-shrink: 0;
+}
+
+/* =====================
+   More ハブ
+   ===================== */
+.more-view {
+  position: relative;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 背景スライドショー */
+.more-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.more-bg-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 1.2s ease;
+  will-change: opacity;
+}
+
+.more-bg-img--visible {
+  opacity: 1;
+}
+
+.more-bg-img--fading {
+  opacity: 0;
+}
+
+.more-bg-scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(8, 13, 22, 0.18) 0%,
+    rgba(8, 13, 22, 0.38) 45%,
+    rgba(8, 13, 22, 0.62) 100%
+  );
+  pointer-events: none;
+}
+
+.more-content {
+  position: relative;
+  z-index: 1;
+  padding: 20px 16px;
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+.more-menu {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  width: 100%;
+  max-width: 720px;
+}
+
+.more-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 150px;
+  width: 100%;
+  padding: 14px;
+  background: rgba(13, 24, 41, 0.65);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(100, 160, 255, 0.15);
+  border-radius: 14px;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: center;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.more-card:hover {
+  border-color: rgba(100, 160, 255, 0.35);
+  background: rgba(13, 24, 41, 0.8);
+}
+
+.more-card:active {
+  transform: scale(0.96);
+}
+
+.more-card-icon {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(var(--accent), 0.12);
+  border-radius: 12px;
+  color: rgba(var(--accent), 0.9);
+  padding: 9px;
+}
+
+.more-card-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.more-card-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.more-card-title {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #dce8f5;
+}
+
+.more-card-sub {
+  font-size: 0.64rem;
+  color: #6a88a8;
+  line-height: 1.3;
+}
+
+@media (min-width: 900px) {
+  .more-menu {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    max-width: 900px;
+    gap: 14px;
+  }
+
+  .more-card {
+    min-height: 140px;
+    padding: 16px 12px;
+  }
+
+  .more-card-icon {
+    width: 36px;
+    height: 36px;
+  }
+}
+
+.more-back {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 3px;
+  padding: 6px 12px;
+  margin: 12px 16px 0;
+  background: none;
+  border: 1px solid rgba(100, 160, 255, 0.15);
+  border-radius: 8px;
+  color: rgba(var(--accent), 0.9);
+  font-size: 0.72rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.more-back:hover {
+  background: rgba(var(--accent), 0.08);
 }

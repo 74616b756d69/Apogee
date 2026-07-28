@@ -9,7 +9,8 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class CalendarEventCreateDto {
     private String title;
-    private String date;       // YYYY-MM-DD
-    private String startTime;  // HH:mm (null = 終日)
-    private String endTime;    // HH:mm (optional)
+    private String date;           // YYYY-MM-DD
+    private String startTime;      // HH:mm (null = 終日)
+    private String endTime;        // HH:mm (optional)
+    private String calendarName;   // カレンダー名 (optional)
 }

@@ -13,4 +13,7 @@ public class CalendarEventDto {
     private String startTime;  // "HH:mm" または終日の場合 null
     private String endTime;
     private boolean allDay;
+    private String calendarName;
+    private String calendarColor; // "#RRGGBB"
+    private String date; // "YYYY-MM-DD"
 }

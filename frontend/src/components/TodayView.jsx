@@ -60,15 +60,7 @@ function formatDateFull(dateStr) {
   })
 }
 
-function toLaunchDateParam(dateStr) {
-  if (!dateStr) return null
-  const jst = new Date(new Date(dateStr).getTime() + 9 * 60 * 60 * 1000)
-  return jst.toISOString().slice(0, 10)
-}
 
-function todayDateKey() {
-  return toLaunchDateParam(new Date().toISOString())
-}
 
 function CountUnit({ n, label, gold }) {
   return (
@@ -86,7 +78,6 @@ function Countdown({ net }) {
   const [countdown, setCountdown] = useState(() => calcCountdown(net))
 
   useEffect(() => {
-    setCountdown(calcCountdown(net))
     if (!net) return
     const id = setInterval(() => setCountdown(calcCountdown(net)), 1000)
     return () => clearInterval(id)
@@ -106,10 +97,7 @@ function Countdown({ net }) {
   )
 }
 
-const POMO_LABELS = { work: 'FOCUS', short: 'SHORT BREAK', long: 'LONG BREAK' }
 const POMO_DURATIONS_TV = { work: 25 * 60, short: 5 * 60, long: 15 * 60 }
-
-function pad2tv(n) { return String(n).padStart(2, '0') }
 
 function sectorPath(cx, cy, r, progress) {
   if (progress >= 0.999) {
@@ -158,8 +146,8 @@ function TodayView({ onColorDetected, pomo, setPomo }) {
 
   const selectedLaunch = launches[selectedIdx] ?? null
   const heroUrl        = selectedLaunch?.imageUrl ?? null
-  const launchDateKey  = toLaunchDateParam(selectedLaunch?.net)
-  const isLaunchToday  = launchDateKey === todayDateKey()
+
+
 
   // ロケット情報を取得
   useEffect(() => {
@@ -208,16 +196,15 @@ function TodayView({ onColorDetected, pomo, setPomo }) {
     return () => clearInterval(id)
   }, [pomo.running, launches.length])
 
-  // カレンダー取得: 選択中の打ち上げが今日なら今日のカレンダー、それ以外は打ち上げ日のカレンダー
   useEffect(() => {
-    setCalLoading(true)
-    const url = isLaunchToday ? '/api/calendar/today' : `/api/calendar/date?date=${launchDateKey}`
-    fetch(url)
+    let cancelled = false
+    fetch('/api/calendar/today')
       .then(r => r.ok ? r.json() : Promise.reject())
-      .then(json => setCalEvents(json))
-      .catch(() => setCalEvents([]))
-      .finally(() => setCalLoading(false))
-  }, [isLaunchToday, launchDateKey])
+      .then(json => { if (!cancelled) setCalEvents(json) })
+      .catch(() => { if (!cancelled) setCalEvents([]) })
+      .finally(() => { if (!cancelled) setCalLoading(false) })
+    return () => { cancelled = true }
+  }, [])
 
   const handleLoad = () => {
     const color = extractDominantColor(imgRef.current)
@@ -242,7 +229,7 @@ function TodayView({ onColorDetected, pomo, setPomo }) {
       {/* ── ヒーローセクション（フルスクリーン） ── */}
       <div className="today-hero">
         {heroUrl ? (
-          <img key={launchKey} ref={imgRef} src={heroUrl} alt="" className="today-bg today-bg--img"
+          <img key={`bg-${launchKey}`} ref={imgRef} src={heroUrl} alt="" className="today-bg today-bg--img"
             crossOrigin="anonymous" onLoad={handleLoad} />
         ) : (
           <div className="today-bg today-bg--fallback" />
@@ -250,7 +237,7 @@ function TodayView({ onColorDetected, pomo, setPomo }) {
         <div className="today-scrim" />
 
         {/* Phase 1: NEXT LAUNCH + カウントダウン */}
-        <div key={launchKey} className={`hero-content hero-phase${isToday ? ' hero-phase--exit' : ''}`}>
+        <div key={`hero-${launchKey}`} className={`hero-content hero-phase${isToday ? ' hero-phase--exit' : ''}`}>
           {selectedLaunch && (
             <>
               <p  className="hero-eyebrow hero-anim hero-anim--1">NEXT LAUNCH</p>
@@ -275,11 +262,11 @@ function TodayView({ onColorDetected, pomo, setPomo }) {
           )}
         </div>
 
-        {/* Phase 2: 打ち上げ日 + Appleカレンダー */}
+        {/* Phase 2: 今日の予定 */}
         <div className={`hero-today hero-phase${isToday ? ' hero-phase--enter' : ''}`}>
-          <p className="hero-eyebrow">{isLaunchToday ? 'TODAY' : 'LAUNCH DAY'}</p>
+          <p className="hero-eyebrow">TODAY</p>
           <h1 className="hero-today-date">
-            {formatDateFull(isLaunchToday ? null : selectedLaunch?.net)}
+            {formatDateFull(null)}
           </h1>
           {calLoading ? (
             <LaunchLoader size="small" label="" />
