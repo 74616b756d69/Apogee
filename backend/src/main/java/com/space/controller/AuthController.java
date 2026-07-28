@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.HashMap;
 import java.util.Map;
 
 @RestController
@@ -18,10 +19,10 @@ public class AuthController {
         if (user == null) {
             return ResponseEntity.status(401).body(Map.of("authenticated", false));
         }
-        return ResponseEntity.ok(Map.of(
-            "authenticated", true,
-            "name", user.getAttribute("name"),
-            "email", user.getAttribute("email")
-        ));
+        Map<String, Object> body = new HashMap<>();
+        body.put("authenticated", true);
+        body.put("name", user.getAttribute("name"));
+        body.put("email", user.getAttribute("email"));
+        return ResponseEntity.ok(body);
     }
 }
