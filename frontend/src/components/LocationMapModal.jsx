@@ -33,7 +33,6 @@ function NewsSection({ launchId }) {
 
   useEffect(() => {
     let cancelled = false
-    setArticles(null)
     fetch(`/api/launches/${launchId}/news`)
       .then(r => r.ok ? r.json() : Promise.reject())
       .then(json => { if (!cancelled) setArticles(json) })

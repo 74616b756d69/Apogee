@@ -60,15 +60,7 @@ function formatDateFull(dateStr) {
   })
 }
 
-function toLaunchDateParam(dateStr) {
-  if (!dateStr) return null
-  const jst = new Date(new Date(dateStr).getTime() + 9 * 60 * 60 * 1000)
-  return jst.toISOString().slice(0, 10)
-}
 
-function todayDateKey() {
-  return toLaunchDateParam(new Date().toISOString())
-}
 
 function CountUnit({ n, label, gold }) {
   return (
@@ -86,7 +78,6 @@ function Countdown({ net }) {
   const [countdown, setCountdown] = useState(() => calcCountdown(net))
 
   useEffect(() => {
-    setCountdown(calcCountdown(net))
     if (!net) return
     const id = setInterval(() => setCountdown(calcCountdown(net)), 1000)
     return () => clearInterval(id)
@@ -106,10 +97,7 @@ function Countdown({ net }) {
   )
 }
 
-const POMO_LABELS = { work: 'FOCUS', short: 'SHORT BREAK', long: 'LONG BREAK' }
 const POMO_DURATIONS_TV = { work: 25 * 60, short: 5 * 60, long: 15 * 60 }
-
-function pad2tv(n) { return String(n).padStart(2, '0') }
 
 function sectorPath(cx, cy, r, progress) {
   if (progress >= 0.999) {
@@ -158,8 +146,8 @@ function TodayView({ onColorDetected, pomo, setPomo }) {
 
   const selectedLaunch = launches[selectedIdx] ?? null
   const heroUrl        = selectedLaunch?.imageUrl ?? null
-  const launchDateKey  = toLaunchDateParam(selectedLaunch?.net)
-  const isLaunchToday  = launchDateKey === todayDateKey()
+
+
 
   // ロケット情報を取得
   useEffect(() => {
@@ -209,12 +197,13 @@ function TodayView({ onColorDetected, pomo, setPomo }) {
   }, [pomo.running, launches.length])
 
   useEffect(() => {
-    setCalLoading(true)
+    let cancelled = false
     fetch('/api/calendar/today')
       .then(r => r.ok ? r.json() : Promise.reject())
-      .then(json => setCalEvents(json))
-      .catch(() => setCalEvents([]))
-      .finally(() => setCalLoading(false))
+      .then(json => { if (!cancelled) setCalEvents(json) })
+      .catch(() => { if (!cancelled) setCalEvents([]) })
+      .finally(() => { if (!cancelled) setCalLoading(false) })
+    return () => { cancelled = true }
   }, [])
 
   const handleLoad = () => {

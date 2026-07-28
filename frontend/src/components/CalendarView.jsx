@@ -76,13 +76,10 @@ function calcCountdown(net) {
 
 function pad2(n) { return String(n).padStart(2, '0') }
 
-const POMO_DURATIONS = { work: 25 * 60, short: 5 * 60, long: 15 * 60 }
-const POMO_LABELS    = { work: 'FOCUS', short: 'BREAK', long: 'LONG BREAK' }
-
 // 打ち上げイベントのデフォルトカラー
 const LAUNCH_COLOR = '#e06a3a'
 
-function CalendarView({ isActive, pomo, setPomo }) {
+function CalendarView({ isActive }) {
   const [launches, setLaunches]       = useState([])
   const [viewDate, setViewDate]       = useState(() => new Date())
   const [selectedKey, setSelectedKey] = useState(null)

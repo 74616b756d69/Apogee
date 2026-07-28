@@ -110,7 +110,7 @@ function App() {
 
         {/* カレンダー */}
         <div className="page">
-          <CalendarView isActive={currentPage === 1} pomo={pomo} setPomo={setPomo} />
+          <CalendarView isActive={currentPage === 1} />
         </div>
 
         {/* 過去の打ち上げ */}
