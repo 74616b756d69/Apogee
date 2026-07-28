@@ -371,7 +371,7 @@ function CalendarView({ isActive }) {
               <div className="launch-thumb launch-thumb--img">
                 {launch.imageUrl
                   ? <img src={launch.imageUrl} alt="" className="launch-row-img" onError={e => { e.target.style.display = 'none' }} />
-                  : <span>🚀</span>
+                  : <span className="launch-thumb-icon">&#9650;</span>
                 }
               </div>
               <div className="launch-info">
@@ -399,7 +399,7 @@ function CalendarView({ isActive }) {
               className="cal-launch-accordion-header"
               onClick={() => setLaunchOpen(o => !o)}
             >
-              <span className="cal-launch-accordion-icon">🚀</span>
+              <span className="cal-launch-accordion-icon">&#9650;</span>
               <span className="cal-launch-accordion-title">{featuredLaunch.name}</span>
               <span className="cal-launch-accordion-arrow">{launchOpen ? '▾' : '▸'}</span>
             </button>

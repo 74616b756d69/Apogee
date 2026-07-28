@@ -1657,8 +1657,13 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(232, 192, 96, 0.16);
+  background: rgba(var(--accent), 0.12);
   font-size: 16px;
+}
+
+.launch-thumb-icon {
+  font-size: 12px;
+  color: rgba(var(--accent), 0.7);
 }
 
 .launch-info {
@@ -2859,4 +2864,174 @@ body {
 .webcast-btn-icon {
   font-size: 0.9rem;
   flex-shrink: 0;
+}
+
+/* =====================
+   More ハブ
+   ===================== */
+.more-view {
+  position: relative;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 背景スライドショー */
+.more-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.more-bg-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 1.2s ease;
+  will-change: opacity;
+}
+
+.more-bg-img--visible {
+  opacity: 1;
+}
+
+.more-bg-img--fading {
+  opacity: 0;
+}
+
+.more-bg-scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(8, 13, 22, 0.18) 0%,
+    rgba(8, 13, 22, 0.38) 45%,
+    rgba(8, 13, 22, 0.62) 100%
+  );
+  pointer-events: none;
+}
+
+.more-content {
+  position: relative;
+  z-index: 1;
+  padding: 20px 16px;
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+.more-menu {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  width: 100%;
+  max-width: 720px;
+}
+
+.more-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 150px;
+  width: 100%;
+  padding: 14px;
+  background: rgba(13, 24, 41, 0.65);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(100, 160, 255, 0.15);
+  border-radius: 14px;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: center;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.more-card:hover {
+  border-color: rgba(100, 160, 255, 0.35);
+  background: rgba(13, 24, 41, 0.8);
+}
+
+.more-card:active {
+  transform: scale(0.96);
+}
+
+.more-card-icon {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(var(--accent), 0.12);
+  border-radius: 12px;
+  color: rgba(var(--accent), 0.9);
+  padding: 9px;
+}
+
+.more-card-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.more-card-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.more-card-title {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #dce8f5;
+}
+
+.more-card-sub {
+  font-size: 0.64rem;
+  color: #6a88a8;
+  line-height: 1.3;
+}
+
+@media (min-width: 900px) {
+  .more-menu {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    max-width: 900px;
+    gap: 14px;
+  }
+
+  .more-card {
+    min-height: 140px;
+    padding: 16px 12px;
+  }
+
+  .more-card-icon {
+    width: 36px;
+    height: 36px;
+  }
+}
+
+.more-back {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 3px;
+  padding: 6px 12px;
+  margin: 12px 16px 0;
+  background: none;
+  border: 1px solid rgba(100, 160, 255, 0.15);
+  border-radius: 8px;
+  color: rgba(var(--accent), 0.9);
+  font-size: 0.72rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.more-back:hover {
+  background: rgba(var(--accent), 0.08);
 }
