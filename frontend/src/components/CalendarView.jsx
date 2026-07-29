@@ -1,7 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import LaunchLoader from './LaunchLoader'
+import CalendarGrid from './CalendarGrid'
+import EventFormSheet from './EventFormSheet'
 
-const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土']
+function csrfToken() {
+  const m = document.cookie.match(/(?:^|;\s*)XSRF-TOKEN=([^;]+)/)
+  return m ? decodeURIComponent(m[1]) : null
+}
+
+function csrfHeaders() {
+  const token = csrfToken()
+  return token ? { 'X-XSRF-TOKEN': token } : {}
+}
 
 function toJstDateKey(dateStr) {
   if (!dateStr) return null
@@ -76,7 +86,6 @@ function calcCountdown(net) {
 
 function pad2(n) { return String(n).padStart(2, '0') }
 
-// 打ち上げイベントのデフォルトカラー
 const LAUNCH_COLOR = '#e06a3a'
 
 function CalendarView({ isActive }) {
@@ -90,7 +99,6 @@ function CalendarView({ isActive }) {
   const [calEvents, setCalEvents]         = useState([])
   const [loadingEvents, setLoadingEvents] = useState(false)
 
-  // 月全体のカレンダーイベント (dateKey → events[])
   const [monthCalEvents, setMonthCalEvents] = useState({})
   const [monthCalLoading, setMonthCalLoading] = useState(true)
   const [showLaunches, setShowLaunches] = useState(() => {
@@ -107,7 +115,6 @@ function CalendarView({ isActive }) {
   const [collections, setCollections] = useState([])
   const [collectionsLoaded, setCollectionsLoaded] = useState(false)
 
-  const titleRef       = useRef(null)
   const activeKeyRef   = useRef(null)
   const eventsCacheRef = useRef({})
 
@@ -143,8 +150,8 @@ function CalendarView({ isActive }) {
     return map
   }, [launches])
 
-  const year            = viewDate.getFullYear()
-  const month           = viewDate.getMonth()
+  const year  = viewDate.getFullYear()
+  const month = viewDate.getMonth()
 
   const monthCacheRef = useRef({})
 
@@ -221,7 +228,6 @@ function CalendarView({ isActive }) {
     cells.push({ day: cells.length - (firstWeekday + daysInMonth) + 1, faint: true, key: null })
   }
 
-  // セルごとの表示イベント (カレンダー + 打ち上げ) を統合
   const dayCombinedEvents = useMemo(() => {
     const map = {}
     for (const [key, events] of Object.entries(monthCalEvents)) {
@@ -287,7 +293,6 @@ function CalendarView({ isActive }) {
     }
     setSubmitError(null)
     setShowSheet(true)
-    setTimeout(() => titleRef.current?.focus(), 50)
   }
 
   const closeSheet = () => {
@@ -329,7 +334,7 @@ function CalendarView({ isActive }) {
       if (editingEvent) {
         const res = await fetch(`/api/calendar/event/${encodeURIComponent(editingEvent.rawUid)}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
           body: JSON.stringify({
             title:        form.title.trim(),
             date:         targetDate,
@@ -351,7 +356,7 @@ function CalendarView({ isActive }) {
         }
         const res = await fetch('/api/calendar/event', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
           body: JSON.stringify({
             title:        optimisticEvent.title,
             date:         targetDate,
@@ -389,7 +394,7 @@ function CalendarView({ isActive }) {
         : ''
       const res = await fetch(
         `/api/calendar/event/${encodeURIComponent(editingEvent.rawUid)}${params}`,
-        { method: 'DELETE' },
+        { method: 'DELETE', headers: csrfHeaders() },
       )
       if (!res.ok) throw new Error()
       setCalEvents(prev => prev.filter(e => e.rawUid !== editingEvent.rawUid))
@@ -555,101 +560,25 @@ function CalendarView({ isActive }) {
         )}
       </div>
 
-      {/* 右パネル: 月グリッド (PC: インライン表示) */}
+      {/* 右パネル: 月グリッド */}
       <div className="cal-right">
-        <div className="calendar-panel">
-          <div className="cal-header">
-            <div className="cal-month">
-              <span>{year}</span>
-              {month + 1}月
-            </div>
-            <div className="cal-nav">
-              {featuredLaunch?.net && toJstDateKey(featuredLaunch.net) !== activeKey && (
-                <button
-                  className="cal-today-btn cal-launch-jump-btn"
-                  onClick={jumpToLaunch}
-                >
-                  Next Rancher
-                </button>
-              )}
-              {activeKey !== todayKey && (
-                <button
-                  className="cal-today-btn"
-                  onClick={jumpToToday}
-                >
-                  ToDay
-                </button>
-              )}
-              <button onClick={() => changeMonth(-1)} aria-label="前の月">‹</button>
-              <button onClick={() => changeMonth(1)}  aria-label="次の月">›</button>
-            </div>
-          </div>
-          <label className="cal-toggle">
-            <input
-              type="checkbox"
-              checked={showLaunches}
-              onChange={e => setShowLaunches(e.target.checked)}
-            />
-            <span className="cal-toggle-dot" style={{ background: LAUNCH_COLOR }} />
-            <span className="cal-toggle-label">打ち上げ予定</span>
-          </label>
-          <div className="weekdays">
-            {WEEKDAYS.map(w => <div key={w}>{w}</div>)}
-          </div>
-          <div className="cal-grid">
-            {cells.map((cell, i) => {
-              const dayEvents  = cell.key ? (dayCombinedEvents[cell.key] || []) : []
-              const isToday    = cell.key === todayKey
-              const isSelected = cell.key === activeKey
-              const MAX_INLINE = 3
-              return (
-                <button
-                  key={i}
-                  className={`cal-day ${cell.faint ? 'faint' : ''} ${isToday ? 'today' : ''} ${isSelected && !cell.faint ? 'selected' : ''}`}
-                  disabled={cell.faint}
-                  onClick={() => {
-                    if (!cell.key) return
-                    setSelectedKey(cell.key === selectedKey ? todayKey : cell.key)
-                  }}
-                >
-                  <span className="cal-day-circle">
-                    <span className="num">{cell.day}</span>
-                  </span>
-                  {/* モバイル: ドット表示 */}
-                  {dayEvents.length > 0 && (
-                    <span className="launch-dot-row">
-                      {dayEvents.slice(0, 3).map((_, idx) => (
-                        <span key={idx} className="launch-dot" />
-                      ))}
-                    </span>
-                  )}
-                  {/* PC: ロード中はスケルトン、完了後はイベント */}
-                  {monthCalLoading ? (
-                    <>
-                      <div className="cal-inline-skeleton" />
-                      <div className="cal-inline-skeleton cal-inline-skeleton--short" />
-                    </>
-                  ) : (
-                    <>
-                      {dayEvents.slice(0, MAX_INLINE).map((e, idx) => (
-                        <div
-                          key={e.uid + idx}
-                          className="cal-inline-event"
-                          style={{ borderLeftColor: e.calendarColor || '#4a9eff' }}
-                        >
-                          {e.title}
-                        </div>
-                      ))}
-                      {dayEvents.length > MAX_INLINE && (
-                        <div className="cal-inline-more">+{dayEvents.length - MAX_INLINE}</div>
-                      )}
-                    </>
-                  )}
-                </button>
-              )
-            })}
-          </div>
-        </div>
+        <CalendarGrid
+          year={year}
+          month={month}
+          cells={cells}
+          dayCombinedEvents={dayCombinedEvents}
+          monthCalLoading={monthCalLoading}
+          todayKey={todayKey}
+          activeKey={activeKey}
+          selectedKey={selectedKey}
+          onSelectDay={setSelectedKey}
+          showLaunches={showLaunches}
+          onToggleLaunches={setShowLaunches}
+          featuredLaunch={featuredLaunch}
+          onJumpToLaunch={jumpToLaunch}
+          onJumpToToday={jumpToToday}
+          onChangeMonth={changeMonth}
+        />
       </div>
 
       {/* FAB */}
@@ -657,121 +586,20 @@ function CalendarView({ isActive }) {
         <button className="cal-fab" onClick={() => openSheet()} aria-label="予定を追加">+</button>
       )}
 
-      {/* 追加シート */}
+      {/* 追加/編集シート */}
       {isActive && showSheet && (
-        <div
-          className="cal-sheet-overlay"
-          onClick={e => { if (e.target === e.currentTarget) closeSheet() }}
-        >
-          <div className="cal-sheet">
-            <div className="cal-sheet-handle" />
-            <div className="cal-sheet-header">
-              <p className="cal-sheet-title">{editingEvent ? '予定を編集' : '新しい予定'}</p>
-              <button className="cal-sheet-close" onClick={closeSheet}>✕</button>
-            </div>
-            <div className="cal-form">
-              <input
-                ref={titleRef}
-                className="cal-input cal-input--title"
-                placeholder="タイトルを入力"
-                value={form.title}
-                onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
-                onKeyDown={e => e.key === 'Enter' && submitEvent()}
-              />
-
-              {/* カレンダー選択 */}
-              {collections.length > 0 && (
-                <div className="cal-field">
-                  <label className="cal-field-label">カレンダー</label>
-                  <div className="cal-collection-list">
-                    {collections.map(c => (
-                      <button
-                        key={c.name}
-                        className={`cal-collection-chip${form.calendarName === c.name ? ' active' : ''}`}
-                        onClick={() => setForm(f => ({ ...f, calendarName: c.name }))}
-                      >
-                        <span className="cal-collection-dot" style={{ background: c.color }} />
-                        {c.name}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* 日付 */}
-              <div className="cal-field">
-                <label className="cal-field-label">日付</label>
-                <input
-                  className="cal-input cal-input--date"
-                  type="date"
-                  value={form.date}
-                  onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
-                />
-              </div>
-
-              {/* 終日 / 時間 */}
-              <div className="cal-field">
-                <div className="cal-allday-row">
-                  <label className="cal-field-label" style={{ marginBottom: 0 }}>時間</label>
-                  <label className="cal-toggle-switch">
-                    <input
-                      type="checkbox"
-                      checked={form.allDay}
-                      onChange={e => setForm(f => ({ ...f, allDay: e.target.checked }))}
-                    />
-                    <span className="cal-toggle-track" />
-                    <span className="cal-toggle-text">終日</span>
-                  </label>
-                </div>
-                {!form.allDay && (
-                  <div className="cal-time-row">
-                    <div className="cal-time-field">
-                      <span className="cal-time-label">開始</span>
-                      <input
-                        className="cal-input cal-input--time"
-                        type="time"
-                        step="300"
-                        value={form.startTime}
-                        onChange={e => setForm(f => ({ ...f, startTime: e.target.value }))}
-                      />
-                    </div>
-                    <span className="cal-time-arrow">→</span>
-                    <div className="cal-time-field">
-                      <span className="cal-time-label">終了</span>
-                      <input
-                        className="cal-input cal-input--time"
-                        type="time"
-                        step="300"
-                        value={form.endTime}
-                        onChange={e => setForm(f => ({ ...f, endTime: e.target.value }))}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {submitError && <p className="cal-error">{submitError}</p>}
-              <div className="cal-form-actions">
-                <button
-                  className="cal-submit-btn"
-                  onClick={submitEvent}
-                  disabled={submitting || deleting || !form.title.trim() || !form.date}
-                >
-                  {submitting ? (editingEvent ? '更新中...' : '追加中...') : (editingEvent ? '更新' : '追加')}
-                </button>
-                {editingEvent && (
-                  <button
-                    className="cal-delete-btn"
-                    onClick={handleDelete}
-                    disabled={deleting || submitting}
-                  >
-                    {deleting ? '削除中...' : '削除'}
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
+        <EventFormSheet
+          editingEvent={editingEvent}
+          form={form}
+          setForm={setForm}
+          collections={collections}
+          submitting={submitting}
+          deleting={deleting}
+          submitError={submitError}
+          onSubmit={submitEvent}
+          onDelete={handleDelete}
+          onClose={closeSheet}
+        />
       )}
     </div>
   )

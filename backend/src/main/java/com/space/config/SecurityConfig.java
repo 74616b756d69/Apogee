@@ -11,6 +11,8 @@ import org.springframework.security.oauth2.client.userinfo.OAuth2UserService;
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 
 @Configuration
 @EnableWebSecurity
@@ -43,7 +45,14 @@ public class SecurityConfig {
                 .logoutUrl("/api/auth/logout")
                 .logoutSuccessUrl("/")
             )
-            .csrf(csrf -> csrf.disable());
+            .csrf(csrf -> {
+                CsrfTokenRequestAttributeHandler handler = new CsrfTokenRequestAttributeHandler();
+                handler.setCsrfRequestAttributeName(null);
+                csrf
+                    .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
+                    .csrfTokenRequestHandler(handler)
+                    .ignoringRequestMatchers("/api/auth/me", "/oauth2/**", "/login/**");
+            });
         return http.build();
     }
 

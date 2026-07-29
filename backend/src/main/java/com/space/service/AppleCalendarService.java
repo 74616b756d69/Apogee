@@ -581,7 +581,7 @@ public class AppleCalendarService {
 
     // ── iCalendar パース ─────────────────────────────
 
-    private List<CalendarEventDto> parseIcsForRange(String icsData, String calendarName,
+    List<CalendarEventDto> parseIcsForRange(String icsData, String calendarName,
                                                       String calendarColor,
                                                       net.fortuna.ical4j.model.Date rangeStart,
                                                       net.fortuna.ical4j.model.Date rangeEnd) {
