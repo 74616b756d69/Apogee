@@ -2064,6 +2064,41 @@ body {
   cursor: default;
 }
 
+.cal-row--editable {
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.cal-row--editable:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.cal-form-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.cal-delete-btn {
+  padding: 14px;
+  border-radius: 12px;
+  background: rgba(220, 60, 60, 0.15);
+  border: 1px solid rgba(220, 60, 60, 0.3);
+  color: #e06060;
+  font-size: 0.95rem;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  transition: opacity 0.15s ease, transform 0.1s ease;
+}
+.cal-delete-btn:active {
+  transform: scale(0.97);
+}
+.cal-delete-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
 /* =====================
    打ち上げ日時
    ===================== */
@@ -2897,10 +2932,6 @@ body {
 
 .more-bg-img--visible {
   opacity: 1;
-}
-
-.more-bg-img--fading {
-  opacity: 0;
 }
 
 .more-bg-scrim {

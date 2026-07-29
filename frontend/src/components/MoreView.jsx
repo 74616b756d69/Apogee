@@ -30,33 +30,17 @@ const VIEWS = {
 }
 
 function useSlideshow() {
-  const [displayed, setDisplayed] = useState(0)
-  const [incoming, setIncoming] = useState(0)
-  const [isTransitioning, setIsTransitioning] = useState(false)
+  const [active, setActive] = useState(0)
 
   useEffect(() => {
-    if (FALLBACK_SLIDES.length < 2) return undefined
-
-    const id = window.setInterval(() => {
-      setIncoming(prev => (prev + 1) % FALLBACK_SLIDES.length)
-      setIsTransitioning(true)
+    if (FALLBACK_SLIDES.length < 2) return
+    const id = setInterval(() => {
+      setActive(prev => (prev + 1) % FALLBACK_SLIDES.length)
     }, SLIDE_INTERVAL)
-
-    return () => window.clearInterval(id)
+    return () => clearInterval(id)
   }, [])
 
-  useEffect(() => {
-    if (!isTransitioning) return undefined
-
-    const id = window.setTimeout(() => {
-      setDisplayed(incoming)
-      setIsTransitioning(false)
-    }, FADE_MS)
-
-    return () => window.clearTimeout(id)
-  }, [incoming, isTransitioning])
-
-  return { slides: FALLBACK_SLIDES, current: displayed, incoming, isTransitioning }
+  return active
 }
 
 function PreviousView() {
@@ -81,7 +65,7 @@ function PreviousView() {
 
 function MoreView() {
   const [activeSection, setActiveSection] = useState(null)
-  const { slides, current, incoming, isTransitioning } = useSlideshow()
+  const activeSlide = useSlideshow()
 
   const View = VIEWS[activeSection]
   if (View) {
@@ -95,21 +79,17 @@ function MoreView() {
 
   return (
     <div className="more-view">
-      {slides.length > 0 && (
-        <div className="more-bg">
+      <div className="more-bg">
+        {FALLBACK_SLIDES.map((slide, i) => (
           <img
-            src={slides[current].imageUrl}
+            key={slide.name}
+            src={slide.imageUrl}
             alt=""
-            className={`more-bg-img ${isTransitioning ? 'more-bg-img--fading' : 'more-bg-img--visible'}`}
+            className={`more-bg-img ${i === activeSlide ? 'more-bg-img--visible' : ''}`}
           />
-          <img
-            src={slides[incoming].imageUrl}
-            alt=""
-            className={`more-bg-img ${isTransitioning ? 'more-bg-img--visible' : ''}`}
-          />
-          <div className="more-bg-scrim" />
-        </div>
-      )}
+        ))}
+        <div className="more-bg-scrim" />
+      </div>
 
       <div className="more-content">
         <div className="section-header">

@@ -99,9 +99,11 @@ function CalendarView({ isActive }) {
   })
 
   const [showSheet, setShowSheet]     = useState(false)
+  const [editingEvent, setEditingEvent] = useState(null)
   const [form, setForm]               = useState({ title: '', date: '', startTime: '', endTime: '', allDay: true, calendarName: '' })
   const [submitting, setSubmitting]   = useState(false)
   const [submitError, setSubmitError] = useState(null)
+  const [deleting, setDeleting]       = useState(false)
   const [collections, setCollections] = useState([])
   const [collectionsLoaded, setCollectionsLoaded] = useState(false)
 
@@ -268,14 +270,30 @@ function CalendarView({ isActive }) {
       .catch(() => setCollectionsLoaded(true))
   }, [collectionsLoaded])
 
-  const openSheet = () => {
-    setForm({ title: '', date: activeKey || todayKey, startTime: '', endTime: '', allDay: true, calendarName: collections[0]?.name || '' })
+  const openSheet = (event = null) => {
+    if (event) {
+      setEditingEvent(event)
+      setForm({
+        title: event.title || '',
+        date: event.date || activeKey || todayKey,
+        startTime: event.startTime || '',
+        endTime: event.endTime || '',
+        allDay: event.allDay ?? true,
+        calendarName: event.calendarName || collections[0]?.name || '',
+      })
+    } else {
+      setEditingEvent(null)
+      setForm({ title: '', date: activeKey || todayKey, startTime: '', endTime: '', allDay: true, calendarName: collections[0]?.name || '' })
+    }
     setSubmitError(null)
     setShowSheet(true)
     setTimeout(() => titleRef.current?.focus(), 50)
   }
 
-  const closeSheet = () => setShowSheet(false)
+  const closeSheet = () => {
+    setShowSheet(false)
+    setEditingEvent(null)
+  }
 
   const refreshCalEvents = () => {
     if (!activeKey) return
@@ -288,47 +306,100 @@ function CalendarView({ isActive }) {
       .catch(() => {})
   }
 
+  const refreshMonth = () => {
+    const key = `${year}-${month}`
+    delete monthCacheRef.current[key]
+    fetch(`/api/calendar/month?year=${year}&month=${month + 1}`)
+      .then(res => res.ok ? res.json() : Promise.reject())
+      .then(json => {
+        monthCacheRef.current[key] = json
+        setMonthCalEvents(json)
+      })
+      .catch(() => {})
+  }
+
   const submitEvent = async () => {
     if (!form.title.trim() || !form.date) return
     setSubmitting(true)
     setSubmitError(null)
     const targetDate = form.date
     const selectedCol = collections.find(c => c.name === form.calendarName)
-    const optimisticEvent = {
-      uid:           `optimistic-${Date.now()}`,
-      title:         form.title.trim(),
-      startTime:     form.allDay ? null : (form.startTime || null),
-      allDay:        form.allDay,
-      calendarName:  form.calendarName || null,
-      calendarColor: selectedCol?.color || null,
-      date:          targetDate,
-    }
+
     try {
-      const res = await fetch('/api/calendar/event', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title:        optimisticEvent.title,
-          date:         targetDate,
-          startTime:    optimisticEvent.startTime,
-          endTime:      form.allDay ? null : (form.endTime || null),
-          calendarName: form.calendarName || null,
-        }),
-      })
-      if (!res.ok) throw new Error()
-      if (targetDate === activeKey) {
-        setCalEvents(prev => {
-          const next = [...prev, optimisticEvent]
-          eventsCacheRef.current[activeKey] = next
-          return next
+      if (editingEvent) {
+        const res = await fetch(`/api/calendar/event/${encodeURIComponent(editingEvent.rawUid)}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title:        form.title.trim(),
+            date:         targetDate,
+            startTime:    form.allDay ? null : (form.startTime || null),
+            endTime:      form.allDay ? null : (form.endTime || null),
+            calendarName: form.calendarName || null,
+          }),
         })
+        if (!res.ok) throw new Error()
+      } else {
+        const optimisticEvent = {
+          uid:           `optimistic-${Date.now()}`,
+          title:         form.title.trim(),
+          startTime:     form.allDay ? null : (form.startTime || null),
+          allDay:        form.allDay,
+          calendarName:  form.calendarName || null,
+          calendarColor: selectedCol?.color || null,
+          date:          targetDate,
+        }
+        const res = await fetch('/api/calendar/event', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title:        optimisticEvent.title,
+            date:         targetDate,
+            startTime:    optimisticEvent.startTime,
+            endTime:      form.allDay ? null : (form.endTime || null),
+            calendarName: form.calendarName || null,
+          }),
+        })
+        if (!res.ok) throw new Error()
+        if (targetDate === activeKey) {
+          setCalEvents(prev => {
+            const next = [...prev, optimisticEvent]
+            eventsCacheRef.current[activeKey] = next
+            return next
+          })
+        }
       }
       closeSheet()
       refreshCalEvents()
+      refreshMonth()
     } catch {
-      setSubmitError('追加に失敗しました')
+      setSubmitError(editingEvent ? '更新に失敗しました' : '追加に失敗しました')
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!editingEvent?.rawUid) return
+    setDeleting(true)
+    setSubmitError(null)
+    try {
+      const params = editingEvent.calendarName
+        ? `?calendarName=${encodeURIComponent(editingEvent.calendarName)}`
+        : ''
+      const res = await fetch(
+        `/api/calendar/event/${encodeURIComponent(editingEvent.rawUid)}${params}`,
+        { method: 'DELETE' },
+      )
+      if (!res.ok) throw new Error()
+      setCalEvents(prev => prev.filter(e => e.rawUid !== editingEvent.rawUid))
+      closeSheet()
+      refreshCalEvents()
+      refreshMonth()
+    } catch {
+      setSubmitError('削除に失敗しました')
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -349,7 +420,13 @@ function CalendarView({ isActive }) {
           </div>
 
           {calEvents.map(e => (
-            <div className="launch-row cal-row--event" key={e.uid}>
+            <div
+              className="launch-row cal-row--event cal-row--editable"
+              key={e.uid}
+              onClick={() => e.rawUid && openSheet(e)}
+              role={e.rawUid ? 'button' : undefined}
+              tabIndex={e.rawUid ? 0 : undefined}
+            >
               <span
                 className="cal-row-bar"
                 style={{ background: e.calendarColor || 'rgba(var(--accent), 0.85)' }}
@@ -577,7 +654,7 @@ function CalendarView({ isActive }) {
 
       {/* FAB */}
       {isActive && (
-        <button className="cal-fab" onClick={openSheet} aria-label="予定を追加">+</button>
+        <button className="cal-fab" onClick={() => openSheet()} aria-label="予定を追加">+</button>
       )}
 
       {/* 追加シート */}
@@ -589,7 +666,7 @@ function CalendarView({ isActive }) {
           <div className="cal-sheet">
             <div className="cal-sheet-handle" />
             <div className="cal-sheet-header">
-              <p className="cal-sheet-title">新しい予定</p>
+              <p className="cal-sheet-title">{editingEvent ? '予定を編集' : '新しい予定'}</p>
               <button className="cal-sheet-close" onClick={closeSheet}>✕</button>
             </div>
             <div className="cal-form">
@@ -674,13 +751,24 @@ function CalendarView({ isActive }) {
               </div>
 
               {submitError && <p className="cal-error">{submitError}</p>}
-              <button
-                className="cal-submit-btn"
-                onClick={submitEvent}
-                disabled={submitting || !form.title.trim() || !form.date}
-              >
-                {submitting ? '追加中...' : '追加'}
-              </button>
+              <div className="cal-form-actions">
+                <button
+                  className="cal-submit-btn"
+                  onClick={submitEvent}
+                  disabled={submitting || deleting || !form.title.trim() || !form.date}
+                >
+                  {submitting ? (editingEvent ? '更新中...' : '追加中...') : (editingEvent ? '更新' : '追加')}
+                </button>
+                {editingEvent && (
+                  <button
+                    className="cal-delete-btn"
+                    onClick={handleDelete}
+                    disabled={deleting || submitting}
+                  >
+                    {deleting ? '削除中...' : '削除'}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
