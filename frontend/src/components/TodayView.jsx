@@ -224,10 +224,10 @@ function TodayView({ onColorDetected, pomo, setPomo }) {
   const isToday = phase === 'today'
 
   return (
-    <div className="today-view" ref={pageRef}>
+    <div className="today-view w-full min-h-full flex flex-col bg-[#080d16]" ref={pageRef}>
 
       {/* ── ヒーローセクション（フルスクリーン） ── */}
-      <div className="today-hero">
+      <div className="today-hero relative h-screen h-[100dvh] shrink-0 overflow-hidden">
         {heroUrl ? (
           <img key={`bg-${launchKey}`} ref={imgRef} src={heroUrl} alt="" className="today-bg today-bg--img"
             crossOrigin="anonymous" onLoad={handleLoad} />
@@ -237,7 +237,7 @@ function TodayView({ onColorDetected, pomo, setPomo }) {
         <div className="today-scrim" />
 
         {/* Phase 1: NEXT LAUNCH + カウントダウン */}
-        <div key={`hero-${launchKey}`} className={`hero-content hero-phase${isToday ? ' hero-phase--exit' : ''}`}>
+        <div key={`hero-${launchKey}`} className={`hero-content hero-phase${isToday ? ' hero-phase--exit' : ''} px-7 pb-[calc(52px+env(safe-area-inset-bottom))] sm:px-8 lg:px-10`}>
           {selectedLaunch && (
             <>
               <p  className="hero-eyebrow hero-anim hero-anim--1">NEXT LAUNCH</p>
@@ -263,7 +263,7 @@ function TodayView({ onColorDetected, pomo, setPomo }) {
         </div>
 
         {/* Phase 2: 今日の予定 */}
-        <div className={`hero-today hero-phase${isToday ? ' hero-phase--enter' : ''}`}>
+        <div className={`hero-today hero-phase${isToday ? ' hero-phase--enter' : ''} px-7 pb-[calc(52px+env(safe-area-inset-bottom))] sm:px-8 lg:px-10`}>
           <p className="hero-eyebrow">TODAY</p>
           <h1 className="hero-today-date">
             {formatDateFull(null)}
@@ -334,7 +334,7 @@ function TodayView({ onColorDetected, pomo, setPomo }) {
 
       {/* ── 下スクロールで見られる打ち上げリスト ── */}
       {launches.length > 1 && (
-        <div className="upcoming-list">
+        <div className="upcoming-list bg-[#06090f] px-4 pb-[calc(72px+env(safe-area-inset-bottom))] pt-7 sm:px-6">
           <p className="upcoming-list-label">UPCOMING LAUNCHES</p>
           {launches.map((launch, i) => {
             const isActive = selectedIdx === i

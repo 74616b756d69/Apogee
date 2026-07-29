@@ -411,10 +411,10 @@ function CalendarView({ isActive }) {
   const totalEvents = calEvents.length + selectedLaunches.length
 
   return (
-    <div className="calendar-view">
+    <div className="calendar-view min-h-full flex flex-col bg-[#080d16]">
 
       {/* 左パネル: アジェンダ（上）+ 打ち上げ情報（下） */}
-      <div className="cal-left">
+      <div className="cal-left border-r border-white/10 bg-[#04080f]">
 
         <div className="calendar-agenda">
           <div className="cal-agenda-header">

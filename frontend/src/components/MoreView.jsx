@@ -78,7 +78,7 @@ function MoreView() {
   }
 
   return (
-    <div className="more-view">
+    <div className="more-view relative min-h-full flex flex-col">
       <div className="more-bg">
         {FALLBACK_SLIDES.map((slide, i) => (
           <img
@@ -91,14 +91,14 @@ function MoreView() {
         <div className="more-bg-scrim" />
       </div>
 
-      <div className="more-content">
+      <div className="more-content relative z-10 flex min-h-full flex-col px-4 pb-6 pt-5 sm:px-6">
         <div className="section-header">
           <p className="section-eyebrow">MORE</p>
           <h2 className="section-title">その他</h2>
           <p className="section-sub">発射履歴・統計データ・宇宙機関情報</p>
         </div>
 
-        <div className="more-menu">
+        <div className="more-menu mt-6 grid w-full max-w-[720px] grid-cols-1 gap-3 sm:grid-cols-2">
           {SECTIONS.map(s => (
             <button key={s.id} className="more-card" onClick={() => setActiveSection(s.id)}>
               <span className="more-card-icon">{s.icon}</span>

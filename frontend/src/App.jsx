@@ -75,29 +75,29 @@ function App() {
   if (!authChecked || !authenticated) return null
 
   return (
-    <div className="app" style={accentStyle}>
-      <div className="pages" ref={scrollRef}>
+    <div className="app relative h-screen overflow-hidden bg-[#080d16] text-[#dce8f5]" style={accentStyle}>
+      <div className="pages flex h-full overflow-x-auto [scrollbar-width:none] [-webkit-overflow-scrolling:touch]" ref={scrollRef}>
         {/* 今日 */}
-        <div className="page">
+        <div className="page min-w-[100vw] w-[100vw] h-full shrink-0 overflow-y-auto snap-start">
           <TodayView onColorDetected={setAccentColor} pomo={pomo} setPomo={setPomo} />
         </div>
 
         {/* カレンダー */}
-        <div className="page">
+        <div className="page min-w-[100vw] w-[100vw] h-full shrink-0 overflow-y-auto snap-start">
           <CalendarView isActive={currentPage === 1} />
         </div>
 
         {/* その他 */}
-        <div className="page">
+        <div className="page min-w-[100vw] w-[100vw] h-full shrink-0 overflow-y-auto snap-start">
           <MoreView />
         </div>
       </div>
 
-      <div className="page-dots">
+      <div className="page-dots fixed bottom-[calc(18px+env(safe-area-inset-bottom))] left-1/2 z-50 flex -translate-x-1/2 gap-2">
         {PAGES.map((_, i) => (
           <button
             key={i}
-            className={`page-dot ${currentPage === i ? 'active' : ''}`}
+            className={`page-dot ${currentPage === i ? 'active' : ''} h-[7px] w-[7px] rounded-full border-0 bg-white/30 p-0 transition-all duration-300`}
             onClick={() => goToPage(i)}
             aria-label={`ページ ${i + 1}`}
           />
