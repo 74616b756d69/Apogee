@@ -69,7 +69,13 @@ function App() {
   }
 
   const accentStyle = accentColor
-    ? { '--accent': `${accentColor.r}, ${accentColor.g}, ${accentColor.b}` }
+    ? (() => {
+        const lum = accentColor.r * 0.299 + accentColor.g * 0.587 + accentColor.b * 0.114
+        return {
+          '--accent': `${accentColor.r}, ${accentColor.g}, ${accentColor.b}`,
+          '--accent-text': lum > 150 ? '4, 16, 31' : '255, 255, 255',
+        }
+      })()
     : {}
 
   if (!authChecked || !authenticated) return null

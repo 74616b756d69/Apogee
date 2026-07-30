@@ -191,4 +191,102 @@ class AppleCalendarServiceTest {
             assertFalse(e.isAllDay());
         }
     }
+
+    @Test
+    void parseKoketsuAllDayTransparentEventWithNoneAlarm() {
+        String ics = """
+                BEGIN:VCALENDAR
+                CALSCALE:GREGORIAN
+                PRODID:-//Apple Inc.//macOS 26.5//EN
+                VERSION:2.0
+                BEGIN:VEVENT
+                CREATED:20260709T121116Z
+                DTEND;VALUE=DATE:20260801
+                DTSTAMP:20260709T121117Z
+                DTSTART;VALUE=DATE:20260701
+                LAST-MODIFIED:20260709T121116Z
+                SEQUENCE:0
+                SUMMARY:公欠申請ずみ
+                UID:0C354403-95D2-415A-B882-FF6C3224675C
+                X-APPLE-CREATOR-IDENTITY:com.apple.calendar
+                X-APPLE-CREATOR-TEAM-IDENTITY:0000000000
+                TRANSP:TRANSPARENT
+                BEGIN:VALARM
+                ACTION:NONE
+                TRIGGER;VALUE=DATE-TIME:19760401T005545Z
+                END:VALARM
+                END:VEVENT
+                END:VCALENDAR
+                """;
+
+        LocalDate from = LocalDate.of(2026, 7, 1);
+        LocalDate to = LocalDate.of(2026, 8, 1);
+        List<CalendarEventDto> events = service.parseIcsForRange(
+                ics, "その他日程", null, toIcalDate(from), toIcalDate(to));
+
+        assertFalse(events.isEmpty(), "公欠申請ずみイベントがパースされること");
+        assertTrue(events.stream().anyMatch(e -> e.getDate().equals("2026-07-01")));
+    }
+
+    @Test
+    void ignoresAppleRelatedToPropertyThatWouldOtherwiseDropTheEvent() {
+        // Apple独自の RELATED-TO;RELTYPE=X-CALENDARSERVER-RECURRENCE-SET は
+        // 行折り返し込みで存在すると、ical4jが例外も出さずVEVENTを丸ごと読み飛ばす。
+        // 実データ(インターンの繰り返し予定)を再現し、除去処理で回復することを確認する。
+        String ics = "BEGIN:VCALENDAR\r\n"
+                + "VERSION:2.0\r\n"
+                + "BEGIN:VEVENT\r\n"
+                + "UID:intern-uid\r\n"
+                + "DTSTART;TZID=Asia/Tokyo:20260121T100000\r\n"
+                + "DTEND;TZID=Asia/Tokyo:20260121T170000\r\n"
+                + "RELATED-TO;RELTYPE=X-CALENDARSERVER-RECURRENCE-SET:3DDD2D76-1F68-4D48-81A\r\n"
+                + " 4-2898A4B435B3\r\n"
+                + "RRULE:FREQ=WEEKLY;UNTIL=20270331T145959Z;BYDAY=TU,WE,FR\r\n"
+                + "SUMMARY:インターン\r\n"
+                + "END:VEVENT\r\n"
+                + "END:VCALENDAR\r\n";
+
+        LocalDate from = LocalDate.of(2026, 7, 1);
+        LocalDate to = LocalDate.of(2026, 8, 1);
+        List<CalendarEventDto> events = service.parseIcsForRange(
+                ics, "インターン", null, toIcalDate(from), toIcalDate(to));
+
+        assertFalse(events.isEmpty(), "RELATED-TOがあっても繰り返し予定がパースされること");
+    }
+
+    @Test
+    void movedRecurrenceInstanceReplacesOriginalWithoutGhostDuplicate() {
+        // マスターのRRULEでは金曜(20260821)が本来の回だが、RECURRENCE-IDで
+        // 20260817(月)に移動させる上書きVEVENTが存在するケース。
+        // EXDATEには元の日付(0821)が含まれていない実データ(iCloud)を再現している。
+        String ics = """
+                BEGIN:VCALENDAR
+                VERSION:2.0
+                BEGIN:VEVENT
+                UID:intern-uid
+                DTSTART;TZID=Asia/Tokyo:20260121T100000
+                DTEND;TZID=Asia/Tokyo:20260121T170000
+                RRULE:FREQ=WEEKLY;UNTIL=20270331T145959Z;BYDAY=TU,WE,FR
+                SUMMARY:インターン
+                END:VEVENT
+                BEGIN:VEVENT
+                UID:intern-uid
+                RECURRENCE-ID;TZID=Asia/Tokyo:20260821T100000
+                DTSTART;TZID=Asia/Tokyo:20260817T100000
+                DTEND;TZID=Asia/Tokyo:20260817T170000
+                SUMMARY:インターン
+                END:VEVENT
+                END:VCALENDAR
+                """;
+
+        LocalDate from = LocalDate.of(2026, 8, 1);
+        LocalDate to = LocalDate.of(2026, 9, 1);
+        List<CalendarEventDto> events = service.parseIcsForRange(
+                ics, "インターン", "#00FF00", toIcalDate(from), toIcalDate(to));
+
+        assertTrue(events.stream().anyMatch(e -> e.getDate().equals("2026-08-17")),
+                "移動先の8/17にインターンの予定が表示されること");
+        assertFalse(events.stream().anyMatch(e -> e.getDate().equals("2026-08-21")),
+                "移動元の8/21には幽霊予定が残らないこと");
+    }
 }

@@ -99,13 +99,13 @@ function CalendarGrid({
               }}
             >
               <span className={[
-                'flex aspect-square w-[76%] max-[480px]:w-[70%] items-center justify-center rounded-full transition-colors md:h-[22px] md:w-[22px] md:min-h-[22px] md:min-w-[22px] md:aspect-auto md:shrink-0 md:self-start',
+                'flex aspect-square w-[82%] max-[480px]:w-[76%] items-center justify-center rounded-full transition-colors md:h-[25px] md:w-[25px] md:min-h-[25px] md:min-w-[25px] md:aspect-auto md:shrink-0 md:self-start',
                 isToday ? 'border-[1.5px] border-gold/65 bg-gold/18' : '',
                 isSelected && !cell.faint ? 'bg-[rgba(var(--accent),1)]' : '',
               ].filter(Boolean).join(' ')}>
                 <span className={[
                   'text-[0.78rem] max-[480px]:text-[0.7rem] md:text-[0.88rem] font-semibold leading-none',
-                  cell.faint ? 'text-[#4d6580]' : isSelected ? 'font-extrabold text-[#04101f]' : 'text-body-text',
+                  cell.faint ? 'text-[#4d6580]' : isSelected ? 'font-extrabold text-[rgba(var(--accent-text,4,16,31),1)]' : 'text-body-text',
                 ].filter(Boolean).join(' ')}>
                   {cell.day}
                 </span>

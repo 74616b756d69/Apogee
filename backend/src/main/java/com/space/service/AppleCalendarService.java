@@ -77,11 +77,14 @@ public class AppleCalendarService {
     private record CachedMonthEvents(Map<String, List<CalendarEventDto>> events, long cachedAt) {}
     private final Map<YearMonth, CachedMonthEvents> monthEventsCache = new ConcurrentHashMap<>();
 
-    private final ExecutorService caldavExecutor = Executors.newFixedThreadPool(8, r -> {
+    private final ExecutorService caldavExecutor = Executors.newFixedThreadPool(32, r -> {
         Thread t = new Thread(r, "caldav-fetch");
         t.setDaemon(true);
         return t;
     });
+
+    private final Map<LocalDate, CompletableFuture<List<CalendarEventDto>>> inFlightDateFetches = new ConcurrentHashMap<>();
+    private final Map<YearMonth, CompletableFuture<Map<String, List<CalendarEventDto>>>> inFlightMonthFetches = new ConcurrentHashMap<>();
 
     private PoolingHttpClientConnectionManager connManager;
     private CloseableHttpClient sharedHttpClient;
@@ -93,8 +96,8 @@ public class AppleCalendarService {
                         .setConnectTimeout(Timeout.ofSeconds(10))
                         .setSocketTimeout(Timeout.ofSeconds(15))
                         .build())
-                .setMaxConnTotal(20)
-                .setMaxConnPerRoute(10)
+                .setMaxConnTotal(40)
+                .setMaxConnPerRoute(32)
                 .build();
         sharedHttpClient = HttpClients.custom()
                 .setConnectionManager(connManager)
@@ -123,6 +126,32 @@ public class AppleCalendarService {
             return cached.events();
         }
 
+        // 同一日付への同時リクエストは1回のCalDAV取得に合流させる（キャッシュ失効直後の一斉リクエストで
+        // スレッド/コネクションプールが枯渇し応答が数十秒遅延するのを防ぐ）
+        boolean[] isLeader = {false};
+        CompletableFuture<List<CalendarEventDto>> future = inFlightDateFetches.computeIfAbsent(date, d -> {
+            isLeader[0] = true;
+            return new CompletableFuture<>();
+        });
+
+        if (isLeader[0]) {
+            try {
+                future.complete(fetchEventsForDate(date));
+            } catch (Exception e) {
+                future.completeExceptionally(e);
+            } finally {
+                inFlightDateFetches.remove(date, future);
+            }
+        }
+
+        try {
+            return future.join();
+        } catch (java.util.concurrent.CompletionException ce) {
+            throw new RuntimeException("Apple Calendar fetch failed: " + ce.getCause().getMessage(), ce.getCause());
+        }
+    }
+
+    private List<CalendarEventDto> fetchEventsForDate(LocalDate date) {
         try {
             List<CollectionInfo> collections = getCachedCollections();
             if (collections.isEmpty()) return List.of();
@@ -136,7 +165,8 @@ public class AppleCalendarService {
                             eventMap.putIfAbsent(dedup, e);
                         }
                     } catch (Exception ex) {
-                        log.warn("CalDAV query failed for collection {}: {}", info.url(), ex.getMessage());
+                        log.warn("CalDAV query failed for collection {} ({}): {}",
+                                info.displayName(), info.url(), ex.getMessage(), ex);
                     }
                 }, caldavExecutor))
                 .toList();
@@ -163,6 +193,22 @@ public class AppleCalendarService {
             return cached.events();
         }
 
+        // 同一月への同時リクエストは1回のCalDAV取得に合流させる
+        boolean[] isLeader = {false};
+        CompletableFuture<Map<String, List<CalendarEventDto>>> future = inFlightMonthFetches.computeIfAbsent(ym, m -> {
+            isLeader[0] = true;
+            return new CompletableFuture<>();
+        });
+
+        if (isLeader[0]) {
+            future.complete(fetchEventsForMonth(ym));
+            inFlightMonthFetches.remove(ym, future);
+        }
+
+        return future.join();
+    }
+
+    private Map<String, List<CalendarEventDto>> fetchEventsForMonth(YearMonth ym) {
         try {
             List<CollectionInfo> collections = getCachedCollections();
             if (collections.isEmpty()) return Map.of();
@@ -179,7 +225,8 @@ public class AppleCalendarService {
                             allEvents.putIfAbsent(dedup, e);
                         }
                     } catch (Exception ex) {
-                        log.warn("CalDAV month query failed for {}: {}", info.url(), ex.getMessage());
+                        log.warn("CalDAV month query failed for collection {} ({}): {}",
+                                info.displayName(), info.url(), ex.getMessage(), ex);
                     }
                 }, caldavExecutor))
                 .toList();
@@ -464,14 +511,28 @@ public class AppleCalendarService {
             """;
         String xml = sendWebDav("PROPFIND", calHome, body, "1");
         if (xml == null) return List.of();
+        log.debug("calendar-home-set PROPFIND raw response:\n{}", xml);
 
         List<CollectionInfo> infos = new ArrayList<>();
         Document doc = parseXml(xml);
         NodeList responses = doc.getElementsByTagNameNS("DAV:", "response");
+        log.debug("calendar-home-set PROPFIND returned {} <response> entries", responses.getLength());
         for (int i = 0; i < responses.getLength(); i++) {
             Element resp = (Element) responses.item(i);
+
+            NodeList hrefNodesForLog = resp.getElementsByTagNameNS("DAV:", "href");
+            String hrefForLog = hrefNodesForLog.getLength() > 0
+                    ? hrefNodesForLog.item(0).getTextContent().trim() : "(no href)";
+
             NodeList calType = resp.getElementsByTagNameNS("urn:ietf:params:xml:ns:caldav", "calendar");
-            if (calType.getLength() == 0) continue;
+            if (calType.getLength() == 0) {
+                NodeList resourcetypeNodes = resp.getElementsByTagNameNS("DAV:", "resourcetype");
+                String resourcetypeXml = resourcetypeNodes.getLength() > 0
+                        ? nodeToString(resourcetypeNodes.item(0)) : "(no resourcetype)";
+                log.debug("Skipping collection {} — no CALDAV:calendar in resourcetype: {}",
+                        hrefForLog, resourcetypeXml);
+                continue;
+            }
 
             NodeList hrefNodes = resp.getElementsByTagNameNS("DAV:", "href");
             if (hrefNodes.getLength() == 0) continue;
@@ -481,6 +542,7 @@ public class AppleCalendarService {
             String displayName = "";
             NodeList nameNodes = resp.getElementsByTagNameNS("DAV:", "displayname");
             if (nameNodes.getLength() > 0) displayName = nameNodes.item(0).getTextContent().trim();
+            log.debug("Discovered calendar collection: href={}, displayName={}", href, displayName);
 
             String color = null;
             NodeList colorNodes = resp.getElementsByTagNameNS("http://apple.com/ns/ical/", "calendar-color");
@@ -522,6 +584,7 @@ public class AppleCalendarService {
 
         String xml = sendWebDav("REPORT", info.url(), body, "1");
         if (xml == null) return List.of();
+        log.debug("calendar-query REPORT (day={}, collection={}) raw response:\n{}", today, info.displayName(), xml);
 
         net.fortuna.ical4j.model.Date rangeStart = new DateTime(
                 java.util.Date.from(today.atStartOfDay(JST).toInstant()));
@@ -531,6 +594,7 @@ public class AppleCalendarService {
         List<CalendarEventDto> events = new ArrayList<>();
         Document doc = parseXml(xml);
         NodeList dataNodes = doc.getElementsByTagNameNS("urn:ietf:params:xml:ns:caldav", "calendar-data");
+        log.debug("Collection {} returned {} calendar-data entries for {}", info.displayName(), dataNodes.getLength(), today);
         for (int i = 0; i < dataNodes.getLength(); i++) {
             String icsData = dataNodes.item(i).getTextContent();
             events.addAll(parseIcsForRange(icsData, info.displayName(), info.color(), rangeStart, rangeEnd));
@@ -563,6 +627,8 @@ public class AppleCalendarService {
 
         String xml = sendWebDav("REPORT", info.url(), body, "1");
         if (xml == null) return List.of();
+        log.debug("calendar-query REPORT (range={}..{}, collection={}) raw response:\n{}",
+                from, to, info.displayName(), xml);
 
         net.fortuna.ical4j.model.Date rangeStart = new DateTime(
                 java.util.Date.from(from.atStartOfDay(JST).toInstant()));
@@ -572,6 +638,8 @@ public class AppleCalendarService {
         List<CalendarEventDto> events = new ArrayList<>();
         Document doc = parseXml(xml);
         NodeList dataNodes = doc.getElementsByTagNameNS("urn:ietf:params:xml:ns:caldav", "calendar-data");
+        log.debug("Collection {} returned {} calendar-data entries for range {}..{}",
+                info.displayName(), dataNodes.getLength(), from, to);
         for (int i = 0; i < dataNodes.getLength(); i++) {
             String icsData = dataNodes.item(i).getTextContent();
             events.addAll(parseIcsForRange(icsData, info.displayName(), info.color(), rangeStart, rangeEnd));
@@ -587,8 +655,28 @@ public class AppleCalendarService {
                                                       net.fortuna.ical4j.model.Date rangeEnd) {
         List<CalendarEventDto> result = new ArrayList<>();
         try {
+            // Apple独自のRELATED-TO;RELTYPE=X-CALENDARSERVER-RECURRENCE-SETは、ical4jが
+            // 例外も出さず該当VEVENTを丸ごと読み飛ばしてしまうため、パース前に除去する。
+            // 表示用途では使わないプロパティなので安全に取り除ける。
+            String sanitizedIcs = icsData.replaceAll(
+                    "(?m)^RELATED-TO[^\\r\\n]*\\r?\\n(?:[ \\t][^\\r\\n]*\\r?\\n)*", "");
+
             CalendarBuilder builder = new CalendarBuilder();
-            Calendar cal = builder.build(new StringReader(icsData));
+            Calendar cal = builder.build(new StringReader(sanitizedIcs));
+
+            // RECURRENCE-ID で上書きされているインスタンス（移動・変更された回）は、
+            // マスターVEVENTのRRULE展開結果から除外する（EXDATEに載らない場合があるため）。
+            Map<String, Set<Long>> recurrenceOverridesByUid = new HashMap<>();
+            for (Component comp : cal.getComponents(Component.VEVENT)) {
+                VEvent event = (VEvent) comp;
+                net.fortuna.ical4j.model.property.RecurrenceId recurId = event.getRecurrenceId();
+                if (recurId == null) continue;
+                Uid uidProp = event.getUid();
+                String uid = uidProp != null ? uidProp.getValue() : "";
+                recurrenceOverridesByUid.computeIfAbsent(uid, k -> new HashSet<>())
+                        .add(recurId.getDate().getTime());
+            }
+
             for (Component comp : cal.getComponents(Component.VEVENT)) {
                 VEvent event = (VEvent) comp;
                 DtStart dtStart = event.getStartDate();
@@ -601,13 +689,35 @@ public class AppleCalendarService {
                 String title = summaryProp != null ? summaryProp.getValue() : "（タイトルなし）";
 
                 boolean allDay = !(dtStart.getDate() instanceof DateTime);
+                boolean isMaster = event.getRecurrenceId() == null;
+                Set<Long> overriddenInstants = recurrenceOverridesByUid.getOrDefault(uid, Set.of());
 
-                PeriodList periods = event.getConsumedTime(rangeStart, rangeEnd);
+                // getConsumedTime()は空き時間扱い(TRANSP:TRANSPARENT)のイベントを意図的に除外する
+                // （空き/busy集計用の実装のため）。カレンダー表示では終日イベント等の
+                // TRANSPARENT指定も表示したいので、一時的にプロパティを外してから計算する。
+                net.fortuna.ical4j.model.property.Transp transp = event.getTransparency();
+                boolean transparent = transp != null
+                        && transp.equals(net.fortuna.ical4j.model.property.Transp.TRANSPARENT);
+                if (transparent) {
+                    event.getProperties().remove(transp);
+                }
+                PeriodList periods;
+                try {
+                    periods = event.getConsumedTime(rangeStart, rangeEnd);
+                } finally {
+                    if (transparent) {
+                        event.getProperties().add(transp);
+                    }
+                }
                 LocalDate qStart = rangeStart.toInstant().atZone(JST).toLocalDate();
                 LocalDate qEnd   = rangeEnd.toInstant().atZone(JST).toLocalDate();
 
                 for (Object obj : periods) {
                     Period period = (Period) obj;
+                    if (isMaster && !overriddenInstants.isEmpty()
+                            && overriddenInstants.contains(period.getStart().getTime())) {
+                        continue;
+                    }
                     ZonedDateTime pStart = allDay
                             ? period.getStart().toInstant().atZone(ZoneId.of("UTC"))
                             : period.getStart().toInstant().atZone(JST);
@@ -637,7 +747,7 @@ public class AppleCalendarService {
                 }
             }
         } catch (Exception e) {
-            log.warn("iCalendar parse error (range): {}", e.getMessage());
+            log.warn("iCalendar parse error (range) — raw ICS was:\n{}", icsData, e);
         }
         return result;
     }
@@ -719,5 +829,19 @@ public class AppleCalendarService {
             log.warn("XML parse error extracting {}: {}", parentLocalName, e.getMessage());
         }
         return null;
+    }
+
+    private String nodeToString(org.w3c.dom.Node node) {
+        try {
+            javax.xml.transform.Transformer transformer =
+                    javax.xml.transform.TransformerFactory.newInstance().newTransformer();
+            transformer.setOutputProperty(javax.xml.transform.OutputKeys.OMIT_XML_DECLARATION, "yes");
+            java.io.StringWriter writer = new java.io.StringWriter();
+            transformer.transform(new javax.xml.transform.dom.DOMSource(node),
+                    new javax.xml.transform.stream.StreamResult(writer));
+            return writer.toString().trim();
+        } catch (Exception e) {
+            return "(failed to serialize node: " + e.getMessage() + ")";
+        }
     }
 }

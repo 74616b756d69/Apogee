@@ -607,7 +607,7 @@ function CalendarView({ isActive }) {
       {/* FAB */}
       {isActive && (
         <button
-          className="fixed bottom-[calc(52px+env(safe-area-inset-bottom))] right-[22px] w-[50px] h-[50px] rounded-full bg-[rgba(var(--accent),1)] border-none text-[#04101f] text-[1.7rem] leading-none cursor-pointer z-30 flex items-center justify-center shadow-[0_4px_18px_rgba(var(--accent),0.45)] transition-[transform,box-shadow] active:scale-[0.91] active:shadow-[0_2px_8px_rgba(var(--accent),0.3)] md:bottom-[50px] md:right-auto md:left-[calc(340px-66px)]"
+          className="fixed bottom-[calc(52px+env(safe-area-inset-bottom))] right-[22px] w-[50px] h-[50px] rounded-full bg-[rgba(var(--accent),1)] border-none text-[rgba(var(--accent-text,4,16,31),1)] text-[1.7rem] leading-none cursor-pointer z-30 flex items-center justify-center shadow-[0_4px_18px_rgba(var(--accent),0.45)] transition-[transform,box-shadow] active:scale-[0.91] active:shadow-[0_2px_8px_rgba(var(--accent),0.3)] md:bottom-[50px] md:right-auto md:left-[calc(340px-66px)]"
           onClick={() => openSheet()}
           aria-label="予定を追加"
         >
