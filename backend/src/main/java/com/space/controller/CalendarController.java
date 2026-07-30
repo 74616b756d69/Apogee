@@ -61,6 +61,17 @@ public class CalendarController {
         return calendarService.getEventsForMonth(year, month);
     }
 
+    @GetMapping("/week")
+    public Map<String, List<CalendarEventDto>> getByWeek(@RequestParam String start) {
+        LocalDate weekStart;
+        try {
+            weekStart = LocalDate.parse(start);
+        } catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid date: " + start);
+        }
+        return calendarService.getEventsForWeek(weekStart);
+    }
+
     @GetMapping("/collections")
     public List<Map<String, String>> getCollections() {
         return calendarService.getCollections();

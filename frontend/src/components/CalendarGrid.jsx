@@ -1,3 +1,5 @@
+import { computeWeekSpans, MAX_LANES } from '../utils/calendarSpans'
+
 const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土']
 
 function toJstDateKey(dateStr) {
@@ -10,6 +12,23 @@ function toJstDateKey(dateStr) {
 
 const LAUNCH_COLOR = '#e06a3a'
 
+function DayBadge({ cell, isToday, isSelected }) {
+  return (
+    <span className={[
+      'flex aspect-square w-[82%] max-[480px]:w-[76%] items-center justify-center rounded-full transition-colors md:h-[25px] md:w-[25px] md:min-h-[25px] md:min-w-[25px] md:aspect-auto md:shrink-0 md:self-start',
+      isToday ? 'border-[1.5px] border-gold/65 bg-gold/18' : '',
+      isSelected && !cell.faint ? 'bg-[rgba(var(--accent),1)]' : '',
+    ].filter(Boolean).join(' ')}>
+      <span className={[
+        'text-[0.78rem] max-[480px]:text-[0.7rem] md:text-[0.88rem] font-semibold leading-none',
+        cell.faint ? 'text-[#4d6580]' : isSelected ? 'font-extrabold text-[rgba(var(--accent-text,4,16,31),1)]' : 'text-body-text',
+      ].filter(Boolean).join(' ')}>
+        {cell.day}
+      </span>
+    </span>
+  )
+}
+
 function CalendarGrid({
   year, month, cells, dayCombinedEvents, monthCalLoading,
   todayKey, activeKey, selectedKey, onSelectDay,
@@ -17,6 +36,9 @@ function CalendarGrid({
   featuredLaunch, onJumpToLaunch, onJumpToToday,
   onChangeMonth,
 }) {
+  const weeks = []
+  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7))
+
   return (
     <div className="border-b border-sky-400/14 bg-[rgba(13,24,41,0.85)] px-5 py-4 pb-3 md:flex md:min-h-0 md:flex-1 md:flex-col md:border-none md:bg-transparent md:p-0 md:max-w-[800px] md:w-full">
       <div className="flex items-center justify-between pb-2">
@@ -78,18 +100,18 @@ function CalendarGrid({
         {WEEKDAYS.map(w => <div key={w}>{w}</div>)}
       </div>
 
-      <div className="grid grid-cols-7 gap-1 px-0 py-0.5 pb-2 md:min-h-0 md:flex-1 md:grid-auto-rows-fr md:content-stretch md:pt-0.5 md:pb-0">
+      {/* モバイル: 日ごとのドット表示 */}
+      <div className="grid grid-cols-7 gap-1 px-0 py-0.5 pb-2 md:hidden">
         {cells.map((cell, i) => {
           const dayEvents  = cell.key ? (dayCombinedEvents[cell.key] || []) : []
           const isToday    = cell.key === todayKey
           const isSelected = cell.key === activeKey
-          const MAX_INLINE = 3
 
           return (
             <button
               key={i}
               className={[
-                'flex aspect-square cursor-pointer flex-col items-center justify-center gap-[3px] border-none bg-transparent p-0.5 font-[inherit] md:aspect-auto md:h-auto md:min-h-0 md:items-start md:justify-start md:gap-0.5 md:overflow-hidden md:p-1 md:px-1 md:py-1.5',
+                'flex aspect-square cursor-pointer flex-col items-center justify-center gap-[3px] border-none bg-transparent p-0.5 font-[inherit]',
                 cell.faint ? 'cursor-default' : '',
               ].filter(Boolean).join(' ')}
               disabled={cell.faint}
@@ -98,21 +120,9 @@ function CalendarGrid({
                 onSelectDay(cell.key === selectedKey ? todayKey : cell.key)
               }}
             >
-              <span className={[
-                'flex aspect-square w-[82%] max-[480px]:w-[76%] items-center justify-center rounded-full transition-colors md:h-[25px] md:w-[25px] md:min-h-[25px] md:min-w-[25px] md:aspect-auto md:shrink-0 md:self-start',
-                isToday ? 'border-[1.5px] border-gold/65 bg-gold/18' : '',
-                isSelected && !cell.faint ? 'bg-[rgba(var(--accent),1)]' : '',
-              ].filter(Boolean).join(' ')}>
-                <span className={[
-                  'text-[0.78rem] max-[480px]:text-[0.7rem] md:text-[0.88rem] font-semibold leading-none',
-                  cell.faint ? 'text-[#4d6580]' : isSelected ? 'font-extrabold text-[rgba(var(--accent-text,4,16,31),1)]' : 'text-body-text',
-                ].filter(Boolean).join(' ')}>
-                  {cell.day}
-                </span>
-              </span>
-
+              <DayBadge cell={cell} isToday={isToday} isSelected={isSelected} />
               {dayEvents.length > 0 && (
-                <span className="flex min-h-[5px] gap-0.5 md:hidden">
+                <span className="flex min-h-[5px] gap-0.5">
                   {dayEvents.slice(0, 3).map((_, idx) => (
                     <span
                       key={idx}
@@ -121,33 +131,78 @@ function CalendarGrid({
                   ))}
                 </span>
               )}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* デスクトップ: 連続日程を1本のバーで連結表示 */}
+      <div className="hidden md:flex md:min-h-0 md:flex-1 md:flex-col md:gap-1 md:pt-0.5">
+        {weeks.map((week, wi) => {
+          const { spans, overflowByCol } = computeWeekSpans(week, dayCombinedEvents)
+          return (
+            <div
+              key={wi}
+              className="relative grid md:min-h-0 md:flex-1"
+              style={{
+                gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
+                gridTemplateRows: `25px repeat(${MAX_LANES}, minmax(0, 1fr)) 12px`,
+              }}
+            >
+              {week.map((cell, ci) => {
+                const isToday    = cell.key === todayKey
+                const isSelected = cell.key === activeKey
+                return (
+                  <button
+                    key={ci}
+                    className={[
+                      'flex flex-col items-start gap-0.5 border-none bg-transparent p-1 font-[inherit]',
+                      cell.faint ? 'cursor-default' : 'cursor-pointer',
+                    ].filter(Boolean).join(' ')}
+                    style={{ gridColumn: ci + 1, gridRow: '1 / -1' }}
+                    disabled={cell.faint}
+                    onClick={() => {
+                      if (!cell.key) return
+                      onSelectDay(cell.key === selectedKey ? todayKey : cell.key)
+                    }}
+                  >
+                    <DayBadge cell={cell} isToday={isToday} isSelected={isSelected} />
+                  </button>
+                )
+              })}
 
               {monthCalLoading ? (
                 <>
-                  <div className="mt-0.5 hidden h-[11px] w-4/5 rounded-sm bg-white/[0.07] md:block" />
-                  <div className="mt-0.5 hidden h-[11px] w-[55%] rounded-sm bg-white/[0.07] md:block" />
+                  <div className="pointer-events-none mx-1 h-[11px] rounded-sm bg-white/[0.07]" style={{ gridColumn: '1 / 3', gridRow: 2 }} />
+                  <div className="pointer-events-none mx-1 h-[11px] rounded-sm bg-white/[0.07]" style={{ gridColumn: '3 / 4', gridRow: 2 }} />
                 </>
               ) : (
                 <>
-                  {dayEvents.slice(0, MAX_INLINE).map((e, idx) => (
+                  {spans.map(s => (
                     <div
-                      key={e.uid + idx}
-                      className={`mt-0.5 hidden w-full cursor-pointer truncate rounded-r-sm border-l-2 bg-white/[0.06] px-1 py-px pl-[5px] text-left text-[0.62rem] leading-[1.35] text-[rgba(220,232,245,0.85)] md:block ${
-                        isSelected ? 'bg-[rgba(var(--accent),0.12)] text-[rgba(220,232,245,0.90)]' : ''
-                      }`}
-                      style={{ borderLeftColor: e.calendarColor || '#4a9eff' }}
+                      key={s.id}
+                      className="pointer-events-none mt-0.5 mr-0.5 truncate rounded-r-sm border-l-2 bg-white/[0.06] px-1 py-px pl-[5px] text-left text-[0.62rem] leading-[1.35] text-[rgba(220,232,245,0.85)]"
+                      style={{
+                        gridColumn: `${s.startCol + 1} / ${s.endCol + 2}`,
+                        gridRow: s.lane + 2,
+                        borderLeftColor: s.calendarColor || '#4a9eff',
+                      }}
                     >
-                      {e.title}
+                      {s.title}
                     </div>
                   ))}
-                  {dayEvents.length > MAX_INLINE && (
-                    <div className={`mt-0.5 hidden pl-[5px] text-[0.58rem] leading-[1.2] md:block ${isSelected ? 'text-white/35' : 'text-white/30'}`}>
-                      +{dayEvents.length - MAX_INLINE}
+                  {Object.entries(overflowByCol).map(([col, count]) => (
+                    <div
+                      key={col}
+                      className="pointer-events-none pl-[5px] text-[0.58rem] leading-[1.2] text-white/30"
+                      style={{ gridColumn: Number(col) + 1, gridRow: MAX_LANES + 2 }}
+                    >
+                      +{count}
                     </div>
-                  )}
+                  ))}
                 </>
               )}
-            </button>
+            </div>
           )
         })}
       </div>

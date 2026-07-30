@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import LaunchLoader from './LaunchLoader'
 import CalendarGrid from './CalendarGrid'
+import CalendarWeekGrid from './CalendarWeekGrid'
 import EventFormSheet from './EventFormSheet'
 
 function csrfToken() {
@@ -23,6 +24,17 @@ function toJstDateKey(dateStr) {
 
 function dateKey(year, month, day) {
   return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+}
+
+function toDateKeyFromDate(d) {
+  return dateKey(d.getFullYear(), d.getMonth(), d.getDate())
+}
+
+function startOfWeekSunday(date) {
+  const d = new Date(date)
+  d.setHours(0, 0, 0, 0)
+  d.setDate(d.getDate() - d.getDay())
+  return d
 }
 
 function formatTime(dateStr) {
@@ -99,8 +111,13 @@ function CalendarView({ isActive }) {
   const [calEvents, setCalEvents]         = useState([])
   const [loadingEvents, setLoadingEvents] = useState(false)
 
+  const [viewMode, setViewMode] = useState('month')
+
   const [monthCalEvents, setMonthCalEvents] = useState({})
   const [monthCalLoading, setMonthCalLoading] = useState(true)
+
+  const [weekCalEvents, setWeekCalEvents] = useState({})
+  const [weekCalLoading, setWeekCalLoading] = useState(true)
   const [showLaunches, setShowLaunches] = useState(() => {
     const saved = localStorage.getItem('cal-show-launches')
     return saved === null ? true : saved === 'true'
@@ -188,6 +205,33 @@ function CalendarView({ isActive }) {
     prefetch(next.getFullYear(), next.getMonth())
   }, [year, month])
 
+  const weekStartDate = useMemo(() => startOfWeekSunday(viewDate), [viewDate])
+  const weekStartKey  = useMemo(() => toDateKeyFromDate(weekStartDate), [weekStartDate])
+  const weekCacheRef  = useRef({})
+
+  useEffect(() => {
+    if (viewMode !== 'week') return
+    const cached = weekCacheRef.current[weekStartKey]
+    if (cached) {
+      setWeekCalEvents(cached)
+      setWeekCalLoading(false)
+    } else {
+      setWeekCalEvents({})
+      setWeekCalLoading(true)
+    }
+    fetch(`/api/calendar/week?start=${weekStartKey}`)
+      .then(res => res.ok ? res.json() : Promise.reject())
+      .then(json => {
+        weekCacheRef.current[weekStartKey] = json
+        setWeekCalEvents(json)
+      })
+      .catch(() => {})
+      .finally(() => setWeekCalLoading(false))
+  }, [viewMode, weekStartKey])
+
+  const visibleCalEvents = viewMode === 'week' ? weekCalEvents : monthCalEvents
+  const visibleCalLoading = viewMode === 'week' ? weekCalLoading : monthCalLoading
+
   const todayKey  = useMemo(() => toJstDateKey(new Date().toISOString()), [])
   const activeKey = selectedKey ?? todayKey
   const selectedLaunches = launchesByDate[activeKey] ?? []
@@ -196,9 +240,9 @@ function CalendarView({ isActive }) {
     activeKeyRef.current = activeKey
     if (!activeKey) return
 
-    const fromMonth = monthCalEvents[activeKey]
-    if (fromMonth) {
-      setCalEvents(fromMonth)
+    const fromVisible = visibleCalEvents[activeKey]
+    if (fromVisible) {
+      setCalEvents(fromVisible)
       setLoadingEvents(false)
       return
     }
@@ -209,9 +253,9 @@ function CalendarView({ isActive }) {
       setLoadingEvents(false)
     } else {
       setCalEvents([])
-      setLoadingEvents(!monthCalLoading)
+      setLoadingEvents(!visibleCalLoading)
     }
-  }, [activeKey, monthCalEvents, monthCalLoading])
+  }, [activeKey, visibleCalEvents, visibleCalLoading])
 
   const firstWeekday    = new Date(year, month, 1).getDay()
   const daysInMonth     = new Date(year, month + 1, 0).getDate()
@@ -230,7 +274,7 @@ function CalendarView({ isActive }) {
 
   const dayCombinedEvents = useMemo(() => {
     const map = {}
-    for (const [key, events] of Object.entries(monthCalEvents)) {
+    for (const [key, events] of Object.entries(visibleCalEvents)) {
       map[key] = [...(map[key] || []), ...events.map(e => ({ ...e, _type: 'cal' }))]
     }
     if (showLaunches) {
@@ -250,9 +294,24 @@ function CalendarView({ isActive }) {
       }
     }
     return map
-  }, [monthCalEvents, launchesByDate, showLaunches])
+  }, [visibleCalEvents, launchesByDate, showLaunches])
+
+  const weekCells = useMemo(() => {
+    const result = []
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(weekStartDate)
+      d.setDate(d.getDate() + i)
+      result.push({ day: d.getDate(), faint: false, key: toDateKeyFromDate(d) })
+    }
+    return result
+  }, [weekStartDate])
 
   const changeMonth = delta => setViewDate(new Date(year, month + delta, 1))
+  const changeWeek = delta => setViewDate(d => {
+    const next = new Date(d)
+    next.setDate(next.getDate() + delta * 7)
+    return next
+  })
 
   const jumpToToday = () => {
     setViewDate(new Date())
@@ -263,8 +322,8 @@ function CalendarView({ isActive }) {
     if (!featuredLaunch?.net) return
     const key = toJstDateKey(featuredLaunch.net)
     if (!key) return
-    const [y, m] = key.split('-').map(Number)
-    setViewDate(new Date(y, m - 1, 1))
+    const [y, m, d] = key.split('-').map(Number)
+    setViewDate(new Date(y, m - 1, d))
     setSelectedKey(key)
   }
 
@@ -319,6 +378,15 @@ function CalendarView({ isActive }) {
       .then(json => {
         monthCacheRef.current[key] = json
         setMonthCalEvents(json)
+      })
+      .catch(() => {})
+
+    delete weekCacheRef.current[weekStartKey]
+    fetch(`/api/calendar/week?start=${weekStartKey}`)
+      .then(res => res.ok ? res.json() : Promise.reject())
+      .then(json => {
+        weekCacheRef.current[weekStartKey] = json
+        setWeekCalEvents(json)
       })
       .catch(() => {})
   }
@@ -583,25 +651,64 @@ function CalendarView({ isActive }) {
         )}
       </div>
 
-      {/* 右パネル: 月グリッド */}
+      {/* 右パネル: 月/週グリッド */}
       <div className="order-1 md:order-2 md:flex-1 md:flex md:flex-col md:items-center md:justify-start md:px-8 md:py-5 md:overflow-hidden md:bg-[rgba(8,14,26,0.6)]">
-        <CalendarGrid
-          year={year}
-          month={month}
-          cells={cells}
-          dayCombinedEvents={dayCombinedEvents}
-          monthCalLoading={monthCalLoading}
-          todayKey={todayKey}
-          activeKey={activeKey}
-          selectedKey={selectedKey}
-          onSelectDay={setSelectedKey}
-          showLaunches={showLaunches}
-          onToggleLaunches={setShowLaunches}
-          featuredLaunch={featuredLaunch}
-          onJumpToLaunch={jumpToLaunch}
-          onJumpToToday={jumpToToday}
-          onChangeMonth={changeMonth}
-        />
+        <div className="flex gap-1 px-5 pt-3 md:px-0 md:pt-0 md:pb-2 md:max-w-[800px] md:w-full">
+          {[
+            { mode: 'month', label: '月' },
+            { mode: 'week', label: '週' },
+          ].map(({ mode, label }) => (
+            <button
+              key={mode}
+              className={[
+                'cursor-pointer rounded-full border px-3 py-1 font-[inherit] text-[0.72rem] font-bold transition-colors',
+                viewMode === mode
+                  ? 'border-[rgba(var(--accent),0.4)] bg-[rgba(var(--accent),0.18)] text-[rgba(var(--accent),0.95)]'
+                  : 'border-sky-400/20 bg-white/5 text-muted hover:text-blue',
+              ].join(' ')}
+              onClick={() => setViewMode(mode)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {viewMode === 'month' ? (
+          <CalendarGrid
+            year={year}
+            month={month}
+            cells={cells}
+            dayCombinedEvents={dayCombinedEvents}
+            monthCalLoading={monthCalLoading}
+            todayKey={todayKey}
+            activeKey={activeKey}
+            selectedKey={selectedKey}
+            onSelectDay={setSelectedKey}
+            showLaunches={showLaunches}
+            onToggleLaunches={setShowLaunches}
+            featuredLaunch={featuredLaunch}
+            onJumpToLaunch={jumpToLaunch}
+            onJumpToToday={jumpToToday}
+            onChangeMonth={changeMonth}
+          />
+        ) : (
+          <CalendarWeekGrid
+            weekStartDate={weekStartDate}
+            cells={weekCells}
+            dayCombinedEvents={dayCombinedEvents}
+            weekCalLoading={weekCalLoading}
+            todayKey={todayKey}
+            activeKey={activeKey}
+            selectedKey={selectedKey}
+            onSelectDay={setSelectedKey}
+            showLaunches={showLaunches}
+            onToggleLaunches={setShowLaunches}
+            featuredLaunch={featuredLaunch}
+            onJumpToLaunch={jumpToLaunch}
+            onJumpToToday={jumpToToday}
+            onChangeWeek={changeWeek}
+          />
+        )}
       </div>
 
       {/* FAB */}

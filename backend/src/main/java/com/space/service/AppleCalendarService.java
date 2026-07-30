@@ -76,6 +76,9 @@ public class AppleCalendarService {
     private static final long MONTH_EVENTS_TTL_MS = 5 * 60 * 1000;
     private record CachedMonthEvents(Map<String, List<CalendarEventDto>> events, long cachedAt) {}
     private final Map<YearMonth, CachedMonthEvents> monthEventsCache = new ConcurrentHashMap<>();
+    private static final long WEEK_EVENTS_TTL_MS = 5 * 60 * 1000;
+    private record CachedWeekEvents(Map<String, List<CalendarEventDto>> events, long cachedAt) {}
+    private final Map<LocalDate, CachedWeekEvents> weekEventsCache = new ConcurrentHashMap<>();
 
     private final ExecutorService caldavExecutor = Executors.newFixedThreadPool(32, r -> {
         Thread t = new Thread(r, "caldav-fetch");
@@ -85,6 +88,7 @@ public class AppleCalendarService {
 
     private final Map<LocalDate, CompletableFuture<List<CalendarEventDto>>> inFlightDateFetches = new ConcurrentHashMap<>();
     private final Map<YearMonth, CompletableFuture<Map<String, List<CalendarEventDto>>>> inFlightMonthFetches = new ConcurrentHashMap<>();
+    private final Map<LocalDate, CompletableFuture<Map<String, List<CalendarEventDto>>>> inFlightWeekFetches = new ConcurrentHashMap<>();
 
     private PoolingHttpClientConnectionManager connManager;
     private CloseableHttpClient sharedHttpClient;
@@ -254,6 +258,75 @@ public class AppleCalendarService {
         }
     }
 
+    public Map<String, List<CalendarEventDto>> getEventsForWeek(LocalDate weekStart) {
+        if (username.isBlank() || password.isBlank()) return Map.of();
+
+        CachedWeekEvents cached = weekEventsCache.get(weekStart);
+        if (cached != null && (System.currentTimeMillis() - cached.cachedAt()) < WEEK_EVENTS_TTL_MS) {
+            return cached.events();
+        }
+
+        // 同一週への同時リクエストは1回のCalDAV取得に合流させる
+        boolean[] isLeader = {false};
+        CompletableFuture<Map<String, List<CalendarEventDto>>> future = inFlightWeekFetches.computeIfAbsent(weekStart, w -> {
+            isLeader[0] = true;
+            return new CompletableFuture<>();
+        });
+
+        if (isLeader[0]) {
+            future.complete(fetchEventsForWeek(weekStart));
+            inFlightWeekFetches.remove(weekStart, future);
+        }
+
+        return future.join();
+    }
+
+    private Map<String, List<CalendarEventDto>> fetchEventsForWeek(LocalDate weekStart) {
+        try {
+            List<CollectionInfo> collections = getCachedCollections();
+            if (collections.isEmpty()) return Map.of();
+
+            LocalDate from = weekStart;
+            LocalDate to = weekStart.plusDays(7);
+
+            Map<String, CalendarEventDto> allEvents = new ConcurrentHashMap<>();
+            List<CompletableFuture<Void>> futures = collections.stream()
+                .map(info -> CompletableFuture.runAsync(() -> {
+                    try {
+                        for (CalendarEventDto e : queryRange(info, from, to)) {
+                            String dedup = e.getUid() + "@" + e.getDate();
+                            allEvents.putIfAbsent(dedup, e);
+                        }
+                    } catch (Exception ex) {
+                        log.warn("CalDAV week query failed for collection {} ({}): {}",
+                                info.displayName(), info.url(), ex.getMessage(), ex);
+                    }
+                }, caldavExecutor))
+                .toList();
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+
+            Map<String, List<CalendarEventDto>> result = new HashMap<>();
+            long now = System.currentTimeMillis();
+            for (CalendarEventDto event : allEvents.values()) {
+                if (event.getDate() == null) continue;
+                result.computeIfAbsent(event.getDate(), k -> new ArrayList<>()).add(event);
+            }
+            for (Map.Entry<String, List<CalendarEventDto>> entry : result.entrySet()) {
+                entry.getValue().sort(Comparator.comparing(e -> e.getStartTime() == null ? "" : e.getStartTime()));
+                LocalDate date = LocalDate.parse(entry.getKey());
+                eventsCache.put(date, new CachedEvents(List.copyOf(entry.getValue()), now));
+            }
+
+            Map<String, List<CalendarEventDto>> immutableResult = Map.copyOf(result);
+            weekEventsCache.put(weekStart, new CachedWeekEvents(immutableResult, now));
+            return immutableResult;
+
+        } catch (Exception e) {
+            log.error("Apple Calendar week fetch failed: {}", e.getMessage());
+            return Map.of();
+        }
+    }
+
     public List<Map<String, String>> getCollections() {
         if (username.isBlank() || password.isBlank()) return List.of();
         try {
@@ -339,8 +412,7 @@ public class AppleCalendarService {
             return null;
         });
 
-        eventsCache.remove(date);
-        monthEventsCache.remove(YearMonth.from(date));
+        clearCachesForDate(date);
     }
 
     public void updateEvent(String rawUid, CalendarEventUpdateDto dto) throws Exception {
@@ -424,6 +496,7 @@ public class AppleCalendarService {
 
         eventsCache.clear();
         monthEventsCache.clear();
+        weekEventsCache.clear();
     }
 
     private String resolveEventUrl(String rawUid, String calendarName) throws Exception {
