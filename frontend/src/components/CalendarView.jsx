@@ -1,7 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import LaunchLoader from './LaunchLoader'
+import CalendarGrid from './CalendarGrid'
+import EventFormSheet from './EventFormSheet'
 
-const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土']
+function csrfToken() {
+  const m = document.cookie.match(/(?:^|;\s*)XSRF-TOKEN=([^;]+)/)
+  return m ? decodeURIComponent(m[1]) : null
+}
+
+function csrfHeaders() {
+  const token = csrfToken()
+  return token ? { 'X-XSRF-TOKEN': token } : {}
+}
 
 function toJstDateKey(dateStr) {
   if (!dateStr) return null
@@ -76,7 +86,6 @@ function calcCountdown(net) {
 
 function pad2(n) { return String(n).padStart(2, '0') }
 
-// 打ち上げイベントのデフォルトカラー
 const LAUNCH_COLOR = '#e06a3a'
 
 function CalendarView({ isActive }) {
@@ -90,7 +99,6 @@ function CalendarView({ isActive }) {
   const [calEvents, setCalEvents]         = useState([])
   const [loadingEvents, setLoadingEvents] = useState(false)
 
-  // 月全体のカレンダーイベント (dateKey → events[])
   const [monthCalEvents, setMonthCalEvents] = useState({})
   const [monthCalLoading, setMonthCalLoading] = useState(true)
   const [showLaunches, setShowLaunches] = useState(() => {
@@ -99,13 +107,14 @@ function CalendarView({ isActive }) {
   })
 
   const [showSheet, setShowSheet]     = useState(false)
+  const [editingEvent, setEditingEvent] = useState(null)
   const [form, setForm]               = useState({ title: '', date: '', startTime: '', endTime: '', allDay: true, calendarName: '' })
   const [submitting, setSubmitting]   = useState(false)
   const [submitError, setSubmitError] = useState(null)
+  const [deleting, setDeleting]       = useState(false)
   const [collections, setCollections] = useState([])
   const [collectionsLoaded, setCollectionsLoaded] = useState(false)
 
-  const titleRef       = useRef(null)
   const activeKeyRef   = useRef(null)
   const eventsCacheRef = useRef({})
 
@@ -141,8 +150,8 @@ function CalendarView({ isActive }) {
     return map
   }, [launches])
 
-  const year            = viewDate.getFullYear()
-  const month           = viewDate.getMonth()
+  const year  = viewDate.getFullYear()
+  const month = viewDate.getMonth()
 
   const monthCacheRef = useRef({})
 
@@ -219,7 +228,6 @@ function CalendarView({ isActive }) {
     cells.push({ day: cells.length - (firstWeekday + daysInMonth) + 1, faint: true, key: null })
   }
 
-  // セルごとの表示イベント (カレンダー + 打ち上げ) を統合
   const dayCombinedEvents = useMemo(() => {
     const map = {}
     for (const [key, events] of Object.entries(monthCalEvents)) {
@@ -268,14 +276,29 @@ function CalendarView({ isActive }) {
       .catch(() => setCollectionsLoaded(true))
   }, [collectionsLoaded])
 
-  const openSheet = () => {
-    setForm({ title: '', date: activeKey || todayKey, startTime: '', endTime: '', allDay: true, calendarName: collections[0]?.name || '' })
+  const openSheet = (event = null) => {
+    if (event) {
+      setEditingEvent(event)
+      setForm({
+        title: event.title || '',
+        date: event.date || activeKey || todayKey,
+        startTime: event.startTime || '',
+        endTime: event.endTime || '',
+        allDay: event.allDay ?? true,
+        calendarName: event.calendarName || collections[0]?.name || '',
+      })
+    } else {
+      setEditingEvent(null)
+      setForm({ title: '', date: activeKey || todayKey, startTime: '', endTime: '', allDay: true, calendarName: collections[0]?.name || '' })
+    }
     setSubmitError(null)
     setShowSheet(true)
-    setTimeout(() => titleRef.current?.focus(), 50)
   }
 
-  const closeSheet = () => setShowSheet(false)
+  const closeSheet = () => {
+    setShowSheet(false)
+    setEditingEvent(null)
+  }
 
   const refreshCalEvents = () => {
     if (!activeKey) return
@@ -288,97 +311,161 @@ function CalendarView({ isActive }) {
       .catch(() => {})
   }
 
+  const refreshMonth = () => {
+    const key = `${year}-${month}`
+    delete monthCacheRef.current[key]
+    fetch(`/api/calendar/month?year=${year}&month=${month + 1}`)
+      .then(res => res.ok ? res.json() : Promise.reject())
+      .then(json => {
+        monthCacheRef.current[key] = json
+        setMonthCalEvents(json)
+      })
+      .catch(() => {})
+  }
+
   const submitEvent = async () => {
     if (!form.title.trim() || !form.date) return
     setSubmitting(true)
     setSubmitError(null)
     const targetDate = form.date
     const selectedCol = collections.find(c => c.name === form.calendarName)
-    const optimisticEvent = {
-      uid:           `optimistic-${Date.now()}`,
-      title:         form.title.trim(),
-      startTime:     form.allDay ? null : (form.startTime || null),
-      allDay:        form.allDay,
-      calendarName:  form.calendarName || null,
-      calendarColor: selectedCol?.color || null,
-      date:          targetDate,
-    }
+
     try {
-      const res = await fetch('/api/calendar/event', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title:        optimisticEvent.title,
-          date:         targetDate,
-          startTime:    optimisticEvent.startTime,
-          endTime:      form.allDay ? null : (form.endTime || null),
-          calendarName: form.calendarName || null,
-        }),
-      })
-      if (!res.ok) throw new Error()
-      if (targetDate === activeKey) {
-        setCalEvents(prev => {
-          const next = [...prev, optimisticEvent]
-          eventsCacheRef.current[activeKey] = next
-          return next
+      if (editingEvent) {
+        const res = await fetch(`/api/calendar/event/${encodeURIComponent(editingEvent.rawUid)}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
+          body: JSON.stringify({
+            title:        form.title.trim(),
+            date:         targetDate,
+            startTime:    form.allDay ? null : (form.startTime || null),
+            endTime:      form.allDay ? null : (form.endTime || null),
+            calendarName: form.calendarName || null,
+          }),
         })
+        if (!res.ok) throw new Error()
+      } else {
+        const optimisticEvent = {
+          uid:           `optimistic-${Date.now()}`,
+          title:         form.title.trim(),
+          startTime:     form.allDay ? null : (form.startTime || null),
+          allDay:        form.allDay,
+          calendarName:  form.calendarName || null,
+          calendarColor: selectedCol?.color || null,
+          date:          targetDate,
+        }
+        const res = await fetch('/api/calendar/event', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
+          body: JSON.stringify({
+            title:        optimisticEvent.title,
+            date:         targetDate,
+            startTime:    optimisticEvent.startTime,
+            endTime:      form.allDay ? null : (form.endTime || null),
+            calendarName: form.calendarName || null,
+          }),
+        })
+        if (!res.ok) throw new Error()
+        if (targetDate === activeKey) {
+          setCalEvents(prev => {
+            const next = [...prev, optimisticEvent]
+            eventsCacheRef.current[activeKey] = next
+            return next
+          })
+        }
       }
       closeSheet()
       refreshCalEvents()
+      refreshMonth()
     } catch {
-      setSubmitError('追加に失敗しました')
+      setSubmitError(editingEvent ? '更新に失敗しました' : '追加に失敗しました')
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!editingEvent?.rawUid) return
+    setDeleting(true)
+    setSubmitError(null)
+    try {
+      const params = editingEvent.calendarName
+        ? `?calendarName=${encodeURIComponent(editingEvent.calendarName)}`
+        : ''
+      const res = await fetch(
+        `/api/calendar/event/${encodeURIComponent(editingEvent.rawUid)}${params}`,
+        { method: 'DELETE', headers: csrfHeaders() },
+      )
+      if (!res.ok) throw new Error()
+      setCalEvents(prev => prev.filter(e => e.rawUid !== editingEvent.rawUid))
+      closeSheet()
+      refreshCalEvents()
+      refreshMonth()
+    } catch {
+      setSubmitError('削除に失敗しました')
+    } finally {
+      setDeleting(false)
     }
   }
 
   const totalEvents = calEvents.length + selectedLaunches.length
 
   return (
-    <div className="calendar-view">
+    <div className="min-h-full flex flex-col bg-[#080d16] md:flex-row md:h-dvh md:overflow-hidden">
 
       {/* 左パネル: アジェンダ（上）+ 打ち上げ情報（下） */}
-      <div className="cal-left">
+      <div className="order-2 flex flex-col md:order-1 md:w-[340px] md:shrink-0 md:overflow-hidden md:border-r md:border-[rgba(100,160,255,0.08)] md:bg-[#04080f]">
 
-        <div className="calendar-agenda">
-          <div className="cal-agenda-header">
-            <p className="cal-agenda-date">{formatAgendaDate(activeKey)}</p>
+        {/* アジェンダ */}
+        <div className="px-5 pt-5 pb-2 md:flex-1 md:min-h-0 md:overflow-y-auto md:bg-[rgba(4,8,16,0.97)] md:px-5 md:py-3.5">
+          <div className="flex items-baseline justify-between mb-3.5 md:mb-2">
+            <p className="text-[0.92rem] font-bold text-body-text">{formatAgendaDate(activeKey)}</p>
             {totalEvents > 0 && (
-              <span className="cal-agenda-count">{totalEvents}件</span>
+              <span className="text-[0.72rem] font-semibold text-[rgba(var(--accent),0.8)]">{totalEvents}件</span>
             )}
           </div>
 
           {calEvents.map(e => (
-            <div className="launch-row cal-row--event" key={e.uid}>
+            <div
+              className="relative pl-3.5 flex gap-3 items-center py-3 border-t border-[rgba(100,160,255,0.12)] rounded-[6px] transition-colors cursor-pointer hover:bg-white/[0.04]"
+              key={e.uid}
+              onClick={() => e.rawUid && openSheet(e)}
+              role={e.rawUid ? 'button' : undefined}
+              tabIndex={e.rawUid ? 0 : undefined}
+            >
               <span
-                className="cal-row-bar"
+                className="absolute left-0 top-4 bottom-4 w-[3px] rounded-sm"
                 style={{ background: e.calendarColor || 'rgba(var(--accent), 0.85)' }}
               />
-              <div className="launch-thumb cal-event-thumb">
-                <span className="cal-event-icon">●</span>
+              <div className="w-[38px] h-[38px] rounded-[9px] shrink-0 flex items-center justify-center bg-[rgba(var(--accent),0.12)] text-[10px]">
+                <span className="text-[rgba(var(--accent),0.9)] leading-none">●</span>
               </div>
-              <div className="launch-info">
-                <b>{e.title}</b>
-                <span>{e.allDay ? '終日' : e.startTime}</span>
-                {e.calendarName && <span className="cal-event-cal-name">{e.calendarName}</span>}
+              <div className="flex-1 min-w-0">
+                <b className="block text-[0.85rem] font-semibold text-body-text mb-0.5">{e.title}</b>
+                <span className="block text-[0.75rem] text-meta">{e.allDay ? '終日' : e.startTime}</span>
+                {e.calendarName && <span className="text-[0.62rem] text-white/35 ml-0.5">{e.calendarName}</span>}
               </div>
             </div>
           ))}
 
           {selectedLaunches.map(launch => (
-            <div className="launch-row cal-row--event" key={launch.id}>
-              <span className="cal-row-bar cal-row-bar--launch" />
-              <div className="launch-thumb launch-thumb--img">
+            <div className="relative pl-3.5 flex gap-3 items-center py-3 border-t border-[rgba(100,160,255,0.12)]" key={launch.id}>
+              <span className="absolute left-0 top-4 bottom-4 w-[3px] rounded-sm bg-[#e8c060]" />
+              <div className="w-[38px] h-[38px] rounded-[9px] shrink-0 flex items-center justify-center p-0 overflow-hidden bg-[#0e1a2e]">
                 {launch.imageUrl
-                  ? <img src={launch.imageUrl} alt="" className="launch-row-img" onError={e => { e.target.style.display = 'none' }} />
-                  : <span className="launch-thumb-icon">&#9650;</span>
+                  ? <img src={launch.imageUrl} alt="" className="w-full h-full object-cover block" onError={e => { e.target.style.display = 'none' }} />
+                  : <span className="text-[12px] text-[rgba(var(--accent),0.7)]">&#9650;</span>
                 }
               </div>
-              <div className="launch-info">
-                <b>{launch.name}</b>
-                <span>{[formatTime(launch.net), launch.locationName].filter(Boolean).join(' · ')}</span>
+              <div className="flex-1 min-w-0">
+                <b className="block text-[0.85rem] font-semibold text-body-text mb-0.5">{launch.name}</b>
+                <span className="block text-[0.75rem] text-meta">{[formatTime(launch.net), launch.locationName].filter(Boolean).join(' · ')}</span>
               </div>
-              {launch.statusName && <span className="badge badge-default">{launch.statusName}</span>}
+              {launch.statusName && (
+                <span className="inline-flex shrink-0 whitespace-nowrap rounded-full border border-sky-400/20 bg-sky-400/10 px-2.5 py-1 text-[0.72rem] font-semibold text-[#7ab8ff]">
+                  {launch.statusName}
+                </span>
+              )}
             </div>
           ))}
 
@@ -387,70 +474,83 @@ function CalendarView({ isActive }) {
           )}
 
           {!loadingEvents && totalEvents === 0 && (
-            <div className="state-msg">この日の予定はありません</div>
+            <div className="py-14 text-center text-base text-muted">この日の予定はありません</div>
           )}
 
-          <div className="cal-agenda-spacer" />
+          <div className="h-[88px]" />
         </div>
 
+        {/* 打ち上げアコーディオン (PC のみ表示) */}
         {featuredLaunch && (
-          <div className={`cal-launch-accordion${launchOpen ? ' open' : ''}`}>
+          <div className="hidden md:flex md:flex-col md:shrink-0 md:border-t md:border-white/[0.08] md:max-h-[50vh]">
             <button
-              className="cal-launch-accordion-header"
+              className="flex items-center gap-2 w-full px-4 py-[10px] bg-transparent border-none text-[#c8daea] text-[0.78rem] font-[inherit] cursor-pointer text-left transition-colors hover:bg-white/[0.04]"
               onClick={() => setLaunchOpen(o => !o)}
             >
-              <span className="cal-launch-accordion-icon">&#9650;</span>
-              <span className="cal-launch-accordion-title">{featuredLaunch.name}</span>
-              <span className="cal-launch-accordion-arrow">{launchOpen ? '▾' : '▸'}</span>
+              <span className="text-[0.9rem]">&#9650;</span>
+              <span className="flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{featuredLaunch.name}</span>
+              <span className="text-[0.7rem] text-white/40">{launchOpen ? '▾' : '▸'}</span>
             </button>
 
             {launchOpen && (
-              <div className="cal-launch-accordion-body">
-                <div className="cal-next-launch">
+              <div className="overflow-y-auto min-h-0">
+                <div className="relative h-[280px] overflow-hidden">
                   {featuredLaunch.imageUrl && (
-                    <img src={featuredLaunch.imageUrl} alt="" className="cal-next-launch-img" />
+                    <img src={featuredLaunch.imageUrl} alt="" className="absolute inset-0 w-full h-full object-cover opacity-50" />
                   )}
-                  <div className="cal-next-launch-overlay" />
-                  <div className="cal-next-launch-body">
-                    <div className="cal-pc-countdown">
-                      <p className="cal-countdown-label">T − MINUS</p>
+                  <div
+                    className="absolute inset-0"
+                    style={{ background: 'linear-gradient(180deg, rgba(4,8,16,0.05) 0%, rgba(4,8,16,0.40) 38%, rgba(4,8,16,0.90) 68%, rgba(4,8,16,0.98) 100%)' }}
+                  />
+                  <div className="absolute inset-0 flex flex-col justify-end px-[22px] pb-5">
+                    {/* カウントダウン */}
+                    <div className="mb-[18px]">
+                      <p className="text-[0.58rem] font-black tracking-[0.24em] text-[rgba(var(--accent),0.75)] mb-2.5">T − MINUS</p>
                       {countdown && !countdown.launched && (
-                        <div className="countdown">
-                          <div className="countdown-unit">
-                            <span className="countdown-num">{pad2(countdown.days)}</span>
-                            <span className="countdown-lbl">DAYS</span>
-                          </div>
-                          <span className="countdown-sep">:</span>
-                          <div className="countdown-unit">
-                            <span className="countdown-num">{pad2(countdown.hours)}</span>
-                            <span className="countdown-lbl">HOURS</span>
-                          </div>
-                          <span className="countdown-sep">:</span>
-                          <div className="countdown-unit">
-                            <span className="countdown-num">{pad2(countdown.minutes)}</span>
-                            <span className="countdown-lbl">MINS</span>
-                          </div>
-                          <span className="countdown-sep">:</span>
-                          <div className="countdown-unit">
-                            <span className="countdown-num countdown-num--sec">{pad2(countdown.seconds)}</span>
-                            <span className="countdown-lbl">SECS</span>
-                          </div>
+                        <div className="flex items-start gap-1">
+                          {[
+                            { val: countdown.days,    lbl: 'DAYS'  },
+                            { val: countdown.hours,   lbl: 'HOURS' },
+                            { val: countdown.minutes, lbl: 'MINS'  },
+                            { val: countdown.seconds, lbl: 'SECS', gold: true },
+                          ].map(({ val, lbl, gold }, i) => (
+                            <>
+                              {i > 0 && (
+                                <span key={`sep-${lbl}`} className="font-mono text-[1.6rem] font-light text-[rgba(122,184,255,0.35)] leading-none pt-1 self-start">:</span>
+                              )}
+                              <div key={lbl} className="flex flex-col items-center gap-[5px] min-w-[46px]">
+                                <span
+                                  className={`font-mono text-[2.0rem] font-extrabold tracking-[-0.03em] leading-none ${gold ? 'text-[#e8c060]' : 'text-white'}`}
+                                  style={{ textShadow: gold ? '0 0 22px rgba(232,192,96,0.55), 0 2px 10px rgba(0,0,0,0.9)' : '0 0 28px rgba(122,184,255,0.5), 0 2px 10px rgba(0,0,0,0.9)' }}
+                                >
+                                  {pad2(val)}
+                                </span>
+                                <span className="text-[0.58rem] font-bold tracking-[0.1em] text-white/40">{lbl}</span>
+                              </div>
+                            </>
+                          ))}
                         </div>
                       )}
                       {countdown?.launched && (
-                        <p className="countdown-launched">LAUNCHED</p>
+                        <p className="mt-[18px] text-[0.88rem] text-white/45 italic tracking-[0.04em]">LAUNCHED</p>
                       )}
                     </div>
 
-                    <div className="cal-next-launch-info">
-                      <p className="cal-next-launch-label">NEXT LAUNCH</p>
-                      <p className="cal-next-launch-name">{featuredLaunch.name}</p>
-                      <p className="cal-next-launch-meta">{formatLaunchDate(featuredLaunch.net)}</p>
+                    {/* 打ち上げ詳細 */}
+                    <div className="border-t border-white/10 pt-3.5">
+                      <p className="text-[0.56rem] font-extrabold tracking-[0.20em] text-[rgba(var(--accent),0.9)] mb-[5px]">NEXT LAUNCH</p>
+                      <p className="text-[0.98rem] font-bold text-white mb-[5px] leading-[1.45]">{featuredLaunch.name}</p>
+                      <p className="text-[0.70rem] text-white/55 mt-[1px]">{formatLaunchDate(featuredLaunch.net)}</p>
                       {featuredLaunch.locationName && (
-                        <p className="cal-next-launch-meta">{featuredLaunch.locationName}</p>
+                        <p className="text-[0.70rem] text-white/55 mt-[1px]">{featuredLaunch.locationName}</p>
                       )}
                       {featuredLaunch.webcastUrl && (
-                        <a className="cal-webcast-link" href={featuredLaunch.webcastUrl} target="_blank" rel="noreferrer">
+                        <a
+                          className="inline-flex items-center gap-[7px] mt-[14px] px-[14px] py-[7px] bg-[rgba(var(--accent),0.10)] border border-[rgba(var(--accent),0.30)] rounded-[6px] text-[rgba(var(--accent),0.95)] text-[0.74rem] font-bold tracking-[0.02em] no-underline transition-colors hover:bg-[rgba(var(--accent),0.22)]"
+                          href={featuredLaunch.webcastUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
                           ▶ ライブ配信を見る
                         </a>
                       )}
@@ -459,15 +559,20 @@ function CalendarView({ isActive }) {
                 </div>
 
                 {launches.length > 1 && (
-                  <div className="cal-launch-list">
+                  <div className="flex flex-col gap-0.5 px-2 py-1 pb-2.5 max-h-[140px] overflow-y-auto">
                     {launches.map((l, i) => (
                       <button
                         key={l.id}
-                        className={`cal-launch-item${i === featuredIdx ? ' active' : ''}`}
+                        className={[
+                          'flex items-center gap-2 w-full px-2.5 py-1.5 border-none rounded-[6px] text-[0.72rem] font-[inherit] cursor-pointer text-left transition-colors hover:bg-white/[0.06]',
+                          i === featuredIdx
+                            ? 'bg-[rgba(var(--accent),0.12)] text-[rgba(200,218,234,0.95)]'
+                            : 'bg-transparent text-[rgba(200,218,234,0.7)]',
+                        ].join(' ')}
                         onClick={() => setFeaturedIdx(i)}
                       >
-                        <span className="cal-launch-item-name">{l.name}</span>
-                        <span className="cal-launch-item-date">{formatLaunchDate(l.net)}</span>
+                        <span className="flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{l.name}</span>
+                        <span className="shrink-0 text-[0.65rem] text-white/35">{formatLaunchDate(l.net)}</span>
                       </button>
                     ))}
                   </div>
@@ -478,212 +583,52 @@ function CalendarView({ isActive }) {
         )}
       </div>
 
-      {/* 右パネル: 月グリッド (PC: インライン表示) */}
-      <div className="cal-right">
-        <div className="calendar-panel">
-          <div className="cal-header">
-            <div className="cal-month">
-              <span>{year}</span>
-              {month + 1}月
-            </div>
-            <div className="cal-nav">
-              {featuredLaunch?.net && toJstDateKey(featuredLaunch.net) !== activeKey && (
-                <button
-                  className="cal-today-btn cal-launch-jump-btn"
-                  onClick={jumpToLaunch}
-                >
-                  Next Rancher
-                </button>
-              )}
-              {activeKey !== todayKey && (
-                <button
-                  className="cal-today-btn"
-                  onClick={jumpToToday}
-                >
-                  ToDay
-                </button>
-              )}
-              <button onClick={() => changeMonth(-1)} aria-label="前の月">‹</button>
-              <button onClick={() => changeMonth(1)}  aria-label="次の月">›</button>
-            </div>
-          </div>
-          <label className="cal-toggle">
-            <input
-              type="checkbox"
-              checked={showLaunches}
-              onChange={e => setShowLaunches(e.target.checked)}
-            />
-            <span className="cal-toggle-dot" style={{ background: LAUNCH_COLOR }} />
-            <span className="cal-toggle-label">打ち上げ予定</span>
-          </label>
-          <div className="weekdays">
-            {WEEKDAYS.map(w => <div key={w}>{w}</div>)}
-          </div>
-          <div className="cal-grid">
-            {cells.map((cell, i) => {
-              const dayEvents  = cell.key ? (dayCombinedEvents[cell.key] || []) : []
-              const isToday    = cell.key === todayKey
-              const isSelected = cell.key === activeKey
-              const MAX_INLINE = 3
-              return (
-                <button
-                  key={i}
-                  className={`cal-day ${cell.faint ? 'faint' : ''} ${isToday ? 'today' : ''} ${isSelected && !cell.faint ? 'selected' : ''}`}
-                  disabled={cell.faint}
-                  onClick={() => {
-                    if (!cell.key) return
-                    setSelectedKey(cell.key === selectedKey ? todayKey : cell.key)
-                  }}
-                >
-                  <span className="cal-day-circle">
-                    <span className="num">{cell.day}</span>
-                  </span>
-                  {/* モバイル: ドット表示 */}
-                  {dayEvents.length > 0 && (
-                    <span className="launch-dot-row">
-                      {dayEvents.slice(0, 3).map((_, idx) => (
-                        <span key={idx} className="launch-dot" />
-                      ))}
-                    </span>
-                  )}
-                  {/* PC: ロード中はスケルトン、完了後はイベント */}
-                  {monthCalLoading ? (
-                    <>
-                      <div className="cal-inline-skeleton" />
-                      <div className="cal-inline-skeleton cal-inline-skeleton--short" />
-                    </>
-                  ) : (
-                    <>
-                      {dayEvents.slice(0, MAX_INLINE).map((e, idx) => (
-                        <div
-                          key={e.uid + idx}
-                          className="cal-inline-event"
-                          style={{ borderLeftColor: e.calendarColor || '#4a9eff' }}
-                        >
-                          {e.title}
-                        </div>
-                      ))}
-                      {dayEvents.length > MAX_INLINE && (
-                        <div className="cal-inline-more">+{dayEvents.length - MAX_INLINE}</div>
-                      )}
-                    </>
-                  )}
-                </button>
-              )
-            })}
-          </div>
-        </div>
+      {/* 右パネル: 月グリッド */}
+      <div className="order-1 md:order-2 md:flex-1 md:flex md:flex-col md:items-center md:justify-start md:px-8 md:py-5 md:overflow-hidden md:bg-[rgba(8,14,26,0.6)]">
+        <CalendarGrid
+          year={year}
+          month={month}
+          cells={cells}
+          dayCombinedEvents={dayCombinedEvents}
+          monthCalLoading={monthCalLoading}
+          todayKey={todayKey}
+          activeKey={activeKey}
+          selectedKey={selectedKey}
+          onSelectDay={setSelectedKey}
+          showLaunches={showLaunches}
+          onToggleLaunches={setShowLaunches}
+          featuredLaunch={featuredLaunch}
+          onJumpToLaunch={jumpToLaunch}
+          onJumpToToday={jumpToToday}
+          onChangeMonth={changeMonth}
+        />
       </div>
 
       {/* FAB */}
       {isActive && (
-        <button className="cal-fab" onClick={openSheet} aria-label="予定を追加">+</button>
+        <button
+          className="fixed bottom-[calc(52px+env(safe-area-inset-bottom))] right-[22px] w-[50px] h-[50px] rounded-full bg-[rgba(var(--accent),1)] border-none text-[#04101f] text-[1.7rem] leading-none cursor-pointer z-30 flex items-center justify-center shadow-[0_4px_18px_rgba(var(--accent),0.45)] transition-[transform,box-shadow] active:scale-[0.91] active:shadow-[0_2px_8px_rgba(var(--accent),0.3)] md:bottom-[50px] md:right-auto md:left-[calc(340px-66px)]"
+          onClick={() => openSheet()}
+          aria-label="予定を追加"
+        >
+          +
+        </button>
       )}
 
-      {/* 追加シート */}
+      {/* 追加/編集シート */}
       {isActive && showSheet && (
-        <div
-          className="cal-sheet-overlay"
-          onClick={e => { if (e.target === e.currentTarget) closeSheet() }}
-        >
-          <div className="cal-sheet">
-            <div className="cal-sheet-handle" />
-            <div className="cal-sheet-header">
-              <p className="cal-sheet-title">新しい予定</p>
-              <button className="cal-sheet-close" onClick={closeSheet}>✕</button>
-            </div>
-            <div className="cal-form">
-              <input
-                ref={titleRef}
-                className="cal-input cal-input--title"
-                placeholder="タイトルを入力"
-                value={form.title}
-                onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
-                onKeyDown={e => e.key === 'Enter' && submitEvent()}
-              />
-
-              {/* カレンダー選択 */}
-              {collections.length > 0 && (
-                <div className="cal-field">
-                  <label className="cal-field-label">カレンダー</label>
-                  <div className="cal-collection-list">
-                    {collections.map(c => (
-                      <button
-                        key={c.name}
-                        className={`cal-collection-chip${form.calendarName === c.name ? ' active' : ''}`}
-                        onClick={() => setForm(f => ({ ...f, calendarName: c.name }))}
-                      >
-                        <span className="cal-collection-dot" style={{ background: c.color }} />
-                        {c.name}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* 日付 */}
-              <div className="cal-field">
-                <label className="cal-field-label">日付</label>
-                <input
-                  className="cal-input cal-input--date"
-                  type="date"
-                  value={form.date}
-                  onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
-                />
-              </div>
-
-              {/* 終日 / 時間 */}
-              <div className="cal-field">
-                <div className="cal-allday-row">
-                  <label className="cal-field-label" style={{ marginBottom: 0 }}>時間</label>
-                  <label className="cal-toggle-switch">
-                    <input
-                      type="checkbox"
-                      checked={form.allDay}
-                      onChange={e => setForm(f => ({ ...f, allDay: e.target.checked }))}
-                    />
-                    <span className="cal-toggle-track" />
-                    <span className="cal-toggle-text">終日</span>
-                  </label>
-                </div>
-                {!form.allDay && (
-                  <div className="cal-time-row">
-                    <div className="cal-time-field">
-                      <span className="cal-time-label">開始</span>
-                      <input
-                        className="cal-input cal-input--time"
-                        type="time"
-                        step="300"
-                        value={form.startTime}
-                        onChange={e => setForm(f => ({ ...f, startTime: e.target.value }))}
-                      />
-                    </div>
-                    <span className="cal-time-arrow">→</span>
-                    <div className="cal-time-field">
-                      <span className="cal-time-label">終了</span>
-                      <input
-                        className="cal-input cal-input--time"
-                        type="time"
-                        step="300"
-                        value={form.endTime}
-                        onChange={e => setForm(f => ({ ...f, endTime: e.target.value }))}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {submitError && <p className="cal-error">{submitError}</p>}
-              <button
-                className="cal-submit-btn"
-                onClick={submitEvent}
-                disabled={submitting || !form.title.trim() || !form.date}
-              >
-                {submitting ? '追加中...' : '追加'}
-              </button>
-            </div>
-          </div>
-        </div>
+        <EventFormSheet
+          editingEvent={editingEvent}
+          form={form}
+          setForm={setForm}
+          collections={collections}
+          submitting={submitting}
+          deleting={deleting}
+          submitError={submitError}
+          onSubmit={submitEvent}
+          onDelete={handleDelete}
+          onClose={closeSheet}
+        />
       )}
     </div>
   )

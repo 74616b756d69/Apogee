@@ -3,10 +3,10 @@ import LaunchLoader from './LaunchLoader'
 
 function StatCard({ value, label, sub, accent }) {
   return (
-    <div className={`stat-card${accent ? ' stat-card--accent' : ''}`}>
-      <span className="stat-value">{value}</span>
-      <span className="stat-label">{label}</span>
-      {sub && <span className="stat-sub">{sub}</span>}
+    <div className={`rounded-[14px] border p-4 ${accent ? 'border-sky-400/20 bg-sky-400/10' : 'border-white/10 bg-[#0d1829]'}`}>
+      <span className="text-2xl font-semibold text-white">{value}</span>
+      <span className="mt-1 block text-[0.9rem] text-[#dce8f5]">{label}</span>
+      {sub && <span className="mt-1 block text-sm text-[#7a93b0]">{sub}</span>}
     </div>
   )
 }
@@ -22,15 +22,15 @@ function BarItem({ rank, name, count, max }) {
   }, [pct])
 
   return (
-    <div className="stats-bar-item">
-      <span className="stats-bar-rank">{rank}</span>
-      <div className="stats-bar-body">
-        <div className="stats-bar-header">
-          <span className="stats-bar-name">{name}</span>
-          <span className="stats-bar-count">{count}</span>
+    <div className="flex items-center gap-3 rounded-xl bg-white/5 px-3 py-3">
+      <span className="w-6 text-sm font-semibold text-[#7ab8ff]">{rank}</span>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center justify-between gap-2">
+          <span className="truncate text-sm text-[#e4edf7]">{name}</span>
+          <span className="text-sm text-[#7ab8ff]">{count}</span>
         </div>
-        <div className="stats-bar-track">
-          <div ref={fillRef} className="stats-bar-fill" style={{ width: 0 }} />
+        <div className="mt-2 h-2 rounded-full bg-white/10">
+          <div ref={fillRef} className="h-full rounded-full bg-[#7ab8ff] transition-[width] duration-500" style={{ width: 0 }} />
         </div>
       </div>
     </div>
@@ -53,7 +53,7 @@ function StatsView() {
     })
   }, [])
 
-  if (loading) return <div className="page-content"><LaunchLoader /></div>
+  if (loading) return <div className="mx-auto w-full max-w-[1200px] px-4 py-6"><LaunchLoader /></div>
 
   const all = [...previous, ...upcoming]
 
@@ -99,14 +99,14 @@ function StatsView() {
   const maxLocation = locationRanking[0]?.[1] ?? 1
 
   return (
-    <div className="stats-view page-content">
-      <div className="section-header">
-        <p className="section-eyebrow">STATISTICS</p>
-        <h2 className="section-title">打ち上げ統計</h2>
-        <p className="section-sub">直近データに基づく集計</p>
+    <div className="mx-auto w-full max-w-[1200px] px-4 py-6 pb-[calc(56px+env(safe-area-inset-bottom))]">
+      <div className="mb-6">
+        <p className="mb-2 text-[0.65rem] font-extrabold uppercase tracking-[0.2em] text-[#7ab8ff]">STATISTICS</p>
+        <h2 className="text-2xl font-semibold text-white">打ち上げ統計</h2>
+        <p className="mt-2 text-sm text-[#7a93b0]">直近データに基づく集計</p>
       </div>
 
-      <div className="stat-grid">
+      <div className="grid gap-4 md:grid-cols-3">
         <StatCard
           value={upcoming.length}
           label="打ち上げ予定"
@@ -126,9 +126,9 @@ function StatsView() {
       </div>
 
       {rocketRanking.length > 0 && (
-        <div className="stats-section">
-          <p className="stats-section-label">ロケット別打ち上げ数</p>
-          <div className="stats-bar-list">
+        <div className="mt-6 rounded-[14px] border border-white/10 bg-[#0d1829] p-4">
+          <p className="mb-3 text-sm font-semibold text-[#dce8f5]">ロケット別打ち上げ数</p>
+          <div className="space-y-3">
             {rocketRanking.map(([name, count], i) => (
               <BarItem key={name} rank={i + 1} name={name} count={count} max={maxRocket} />
             ))}
@@ -137,9 +137,9 @@ function StatsView() {
       )}
 
       {locationRanking.length > 0 && (
-        <div className="stats-section">
-          <p className="stats-section-label">打ち上げ拠点ランキング</p>
-          <div className="stats-bar-list">
+        <div className="mt-6 rounded-[14px] border border-white/10 bg-[#0d1829] p-4">
+          <p className="mb-3 text-sm font-semibold text-[#dce8f5]">打ち上げ拠点ランキング</p>
+          <div className="space-y-3">
             {locationRanking.map(([name, count], i) => (
               <BarItem key={name} rank={i + 1} name={name} count={count} max={maxLocation} />
             ))}
@@ -148,13 +148,13 @@ function StatsView() {
       )}
 
       {missionTypes.length > 0 && (
-        <div className="stats-section">
-          <p className="stats-section-label">ミッションタイプ</p>
-          <div className="stats-type-wrap">
+        <div className="mt-6 rounded-[14px] border border-white/10 bg-[#0d1829] p-4">
+          <p className="mb-3 text-sm font-semibold text-[#dce8f5]">ミッションタイプ</p>
+          <div className="flex flex-wrap gap-2">
             {missionTypes.map(([type, count]) => (
-              <div key={type} className="type-chip">
-                <span className="type-chip-name">{type}</span>
-                <span className="type-chip-count">{count}</span>
+              <div key={type} className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-sm text-[#dce8f5]">
+                <span>{type}</span>
+                <span className="text-[#7ab8ff]">{count}</span>
               </div>
             ))}
           </div>
@@ -162,13 +162,13 @@ function StatsView() {
       )}
 
       {upcomingStatuses.length > 0 && (
-        <div className="stats-section">
-          <p className="stats-section-label">打ち上げ予定の状況</p>
-          <div className="stats-type-wrap">
+        <div className="mt-6 rounded-[14px] border border-white/10 bg-[#0d1829] p-4">
+          <p className="mb-3 text-sm font-semibold text-[#dce8f5]">打ち上げ予定の状況</p>
+          <div className="flex flex-wrap gap-2">
             {upcomingStatuses.map(([status, count]) => (
-              <div key={status} className="type-chip">
-                <span className="type-chip-name">{status}</span>
-                <span className="type-chip-count">{count}</span>
+              <div key={status} className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-sm text-[#dce8f5]">
+                <span>{status}</span>
+                <span className="text-[#7ab8ff]">{count}</span>
               </div>
             ))}
           </div>

@@ -2,6 +2,7 @@ package com.space.controller;
 
 import com.space.dto.CalendarEventCreateDto;
 import com.space.dto.CalendarEventDto;
+import com.space.dto.CalendarEventUpdateDto;
 import com.space.service.AppleCalendarService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -70,6 +71,27 @@ public class CalendarController {
     public void createEvent(@RequestBody CalendarEventCreateDto dto) {
         try {
             calendarService.createEvent(dto);
+        } catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage());
+        }
+    }
+
+    @PutMapping("/event/{uid}")
+    public void updateEvent(@PathVariable String uid,
+                            @RequestBody CalendarEventUpdateDto dto) {
+        try {
+            calendarService.updateEvent(uid, dto);
+        } catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage());
+        }
+    }
+
+    @DeleteMapping("/event/{uid}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteEvent(@PathVariable String uid,
+                            @RequestParam(required = false) String calendarName) {
+        try {
+            calendarService.deleteEvent(uid, calendarName);
         } catch (Exception e) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage());
         }

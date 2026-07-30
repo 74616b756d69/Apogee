@@ -23,17 +23,17 @@ function AgencyView() {
     : agencies
 
   return (
-    <div className="agency-view page-content">
-      <div className="section-header">
-        <p className="section-eyebrow">ORGANIZATIONS</p>
-        <h2 className="section-title">宇宙機関</h2>
-        <p className="section-sub">打ち上げを手がける機関・企業一覧</p>
+    <div className="mx-auto w-full max-w-[1200px] px-4 py-6 pb-[calc(56px+env(safe-area-inset-bottom))] sm:px-4">
+      <div className="mb-6">
+        <p className="mb-2 text-[0.65rem] font-extrabold uppercase tracking-[0.2em] text-[#7ab8ff]">ORGANIZATIONS</p>
+        <h2 className="text-2xl font-semibold text-white">宇宙機関</h2>
+        <p className="mt-2 text-sm text-[#7a93b0]">打ち上げを手がける機関・企業一覧</p>
       </div>
 
       {!loading && agencies.length > 0 && (
-        <div className="agency-search-wrap">
+        <div className="mb-6">
           <input
-            className="agency-search"
+            className="w-full rounded-full border border-white/10 bg-white/5 px-4 py-3 text-sm text-[#dce8f5] placeholder:text-[#6a88a8] focus:border-sky-400/40 focus:outline-none"
             type="search"
             placeholder="名称・略称で検索..."
             value={search}
@@ -45,9 +45,9 @@ function AgencyView() {
       {loading ? (
         <LaunchLoader />
       ) : filtered.length === 0 ? (
-        <div className="state-msg">機関が見つかりません</div>
+        <div className="py-14 text-center text-base text-[#7a93b0]">機関が見つかりません</div>
       ) : (
-        <div className="grid">
+        <div className="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
           {filtered.map(agency => (
             <AgencyCard key={agency.id} agency={agency} />
           ))}

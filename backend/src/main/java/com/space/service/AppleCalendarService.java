@@ -2,6 +2,7 @@ package com.space.service;
 
 import com.space.dto.CalendarEventCreateDto;
 import com.space.dto.CalendarEventDto;
+import com.space.dto.CalendarEventUpdateDto;
 import lombok.extern.slf4j.Slf4j;
 import net.fortuna.ical4j.data.CalendarBuilder;
 import net.fortuna.ical4j.model.Calendar;
@@ -295,6 +296,110 @@ public class AppleCalendarService {
         monthEventsCache.remove(YearMonth.from(date));
     }
 
+    public void updateEvent(String rawUid, CalendarEventUpdateDto dto) throws Exception {
+        if (username.isBlank() || password.isBlank()) {
+            throw new Exception("Apple Calendar credentials not configured");
+        }
+
+        LocalDate date = LocalDate.parse(dto.getDate());
+        boolean allDay = dto.getStartTime() == null || dto.getStartTime().isBlank();
+
+        String dtstamp = ZonedDateTime.now(ZoneId.of("UTC"))
+                .format(DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'"));
+
+        StringBuilder ics = new StringBuilder();
+        ics.append("BEGIN:VCALENDAR\r\n")
+           .append("VERSION:2.0\r\n")
+           .append("PRODID:-//SpaceApp//EN\r\n")
+           .append("BEGIN:VEVENT\r\n")
+           .append("UID:").append(rawUid).append("\r\n")
+           .append("DTSTAMP:").append(dtstamp).append("\r\n");
+
+        if (allDay) {
+            String d   = date.format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+            String end = date.plusDays(1).format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+            ics.append("DTSTART;VALUE=DATE:").append(d).append("\r\n")
+               .append("DTEND;VALUE=DATE:").append(end).append("\r\n");
+        } else {
+            DateTimeFormatter icalFmt = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss");
+            LocalTime start = LocalTime.parse(dto.getStartTime());
+            LocalTime end   = (dto.getEndTime() != null && !dto.getEndTime().isBlank())
+                    ? LocalTime.parse(dto.getEndTime())
+                    : start.plusHours(1);
+            ics.append("DTSTART;TZID=Asia/Tokyo:")
+               .append(ZonedDateTime.of(date, start, JST).format(icalFmt)).append("\r\n")
+               .append("DTEND;TZID=Asia/Tokyo:")
+               .append(ZonedDateTime.of(date, end, JST).format(icalFmt)).append("\r\n");
+        }
+
+        ics.append("SUMMARY:").append(dto.getTitle()).append("\r\n")
+           .append("END:VEVENT\r\n")
+           .append("END:VCALENDAR\r\n");
+
+        String eventUrl = resolveEventUrl(rawUid, dto.getCalendarName());
+
+        HttpUriRequestBase req = new HttpUriRequestBase("PUT", URI.create(eventUrl));
+        req.setHeader("Authorization", basicAuth());
+        req.setHeader("Content-Type", "text/calendar; charset=utf-8");
+        req.setEntity(new StringEntity(ics.toString(),
+                ContentType.create("text/calendar", StandardCharsets.UTF_8)));
+
+        sharedHttpClient.execute(req, resp -> {
+            int status = resp.getCode();
+            EntityUtils.consume(resp.getEntity());
+            if (status < 200 || status >= 300) {
+                throw new RuntimeException("CalDAV PUT (update) failed: " + status);
+            }
+            return null;
+        });
+
+        clearCachesForDate(date);
+    }
+
+    public void deleteEvent(String rawUid, String calendarName) throws Exception {
+        if (username.isBlank() || password.isBlank()) {
+            throw new Exception("Apple Calendar credentials not configured");
+        }
+
+        String eventUrl = resolveEventUrl(rawUid, calendarName);
+
+        HttpUriRequestBase req = new HttpUriRequestBase("DELETE", URI.create(eventUrl));
+        req.setHeader("Authorization", basicAuth());
+
+        sharedHttpClient.execute(req, resp -> {
+            int status = resp.getCode();
+            EntityUtils.consume(resp.getEntity());
+            if (status < 200 || status >= 300) {
+                throw new RuntimeException("CalDAV DELETE failed: " + status);
+            }
+            return null;
+        });
+
+        eventsCache.clear();
+        monthEventsCache.clear();
+    }
+
+    private String resolveEventUrl(String rawUid, String calendarName) throws Exception {
+        List<CollectionInfo> collections = getCachedCollections();
+        if (collections.isEmpty()) throw new Exception("No calendar collections found");
+
+        CollectionInfo target = collections.get(0);
+        if (calendarName != null && !calendarName.isBlank()) {
+            target = collections.stream()
+                    .filter(c -> c.displayName().equals(calendarName))
+                    .findFirst()
+                    .orElse(target);
+        }
+        String col = target.url();
+        if (!col.endsWith("/")) col += "/";
+        return col + rawUid + ".ics";
+    }
+
+    private void clearCachesForDate(LocalDate date) {
+        eventsCache.remove(date);
+        monthEventsCache.remove(YearMonth.from(date));
+    }
+
     // ── コレクション探索（キャッシュ付き） ───────────────
 
     private synchronized List<CollectionInfo> getCachedCollections() throws Exception {
@@ -476,7 +581,7 @@ public class AppleCalendarService {
 
     // ── iCalendar パース ─────────────────────────────
 
-    private List<CalendarEventDto> parseIcsForRange(String icsData, String calendarName,
+    List<CalendarEventDto> parseIcsForRange(String icsData, String calendarName,
                                                       String calendarColor,
                                                       net.fortuna.ical4j.model.Date rangeStart,
                                                       net.fortuna.ical4j.model.Date rangeEnd) {
@@ -519,13 +624,13 @@ public class AppleCalendarService {
                     if (startDate.equals(endDate)) {
                         String dateKey = startDate.toString();
                         String startTime = allDay ? null : pStart.format(TIME_FMT);
-                        result.add(new CalendarEventDto(uid + "_" + dateKey, title, startTime, null,
+                        result.add(new CalendarEventDto(uid + "_" + dateKey, uid, title, startTime, null,
                                 allDay, calendarName, calendarColor, dateKey));
                     } else {
                         for (LocalDate d = startDate; !d.isAfter(endDate); d = d.plusDays(1)) {
                             if (d.isBefore(qStart) || !d.isBefore(qEnd)) continue;
                             String dateKey = d.toString();
-                            result.add(new CalendarEventDto(uid + "_" + dateKey, title, null, null,
+                            result.add(new CalendarEventDto(uid + "_" + dateKey, uid, title, null, null,
                                     true, calendarName, calendarColor, dateKey));
                         }
                     }

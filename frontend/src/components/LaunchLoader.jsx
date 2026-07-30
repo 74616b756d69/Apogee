@@ -2,35 +2,38 @@
  * ロケットが軌道弧に沿って地球を通過するローディング演出
  */
 function LaunchLoader({ label = '読み込み中...', size = 'default' }) {
+  const isSmall = size === 'small'
+
   return (
-    <div className={`launch-loader launch-loader--${size}`}>
-      <svg className="launch-loader-svg" viewBox="0 0 200 140" xmlns="http://www.w3.org/2000/svg">
-        {/* 星 */}
+    <div className={`flex flex-col items-center justify-center ${isSmall ? 'py-2.5' : 'px-4 py-8'}`}>
+      <svg
+        className={`h-auto drop-shadow-[0_0_10px_rgba(var(--accent),0.25)] ${isSmall ? 'w-[92px]' : 'w-40'}`}
+        viewBox="0 0 200 140"
+        xmlns="http://www.w3.org/2000/svg"
+      >
         <g fill="#FFFFFF" stroke="none">
-          <polygon className="loader-star" style={{ animationDelay: '0s' }}
+          <polygon className="animate-loader-twinkle" style={{ animationDelay: '0s' }}
             points="18,22 18.85,24.85 21,25.7 18.85,26.55 18,29.4 17.15,26.55 15,25.7 17.15,24.85" />
-          <polygon className="loader-star" style={{ animationDelay: '0.6s' }}
+          <polygon className="animate-loader-twinkle" style={{ animationDelay: '0.6s' }}
             points="176,18 177.4,22.2 181,24 177.4,25.8 176,30 174.6,25.8 171,24 174.6,22.2" />
-          <polygon className="loader-star" style={{ animationDelay: '1.2s' }}
+          <polygon className="animate-loader-twinkle" style={{ animationDelay: '1.2s' }}
             points="30,115 30.85,117.85 33,118.7 30.85,119.55 30,122.4 29.15,119.55 27,118.7 29.15,117.85" />
-          <polygon className="loader-star" style={{ animationDelay: '0.3s' }}
+          <polygon className="animate-loader-twinkle" style={{ animationDelay: '0.3s' }}
             points="185,105 186.1,108.1 189,109 186.1,109.9 185,113 183.9,109.9 181,109 183.9,108.1" />
-          <polygon className="loader-star" style={{ animationDelay: '1.5s' }}
+          <polygon className="animate-loader-twinkle" style={{ animationDelay: '1.5s' }}
             points="100,14 100.55,15.55 102,16 100.55,16.45 100,18 99.45,16.45 98,16 99.45,15.55" />
-          <polygon className="loader-star" style={{ animationDelay: '0.9s' }}
+          <polygon className="animate-loader-twinkle" style={{ animationDelay: '0.9s' }}
             points="8,70 8.55,71.55 10,72 8.55,72.45 8,74 7.45,72.45 6,72 7.45,71.55" />
         </g>
 
-        {/* 軌道弧 */}
         <path
           id="loader-orbit-path"
-          className="loader-orbit"
+          className="opacity-50"
           d="M20 100 A80 60 0 0 1 180 100"
           fill="none" stroke="#FFFFFF" strokeWidth="1.5" strokeDasharray="5 6" strokeLinecap="round"
         />
 
-        {/* 地球 */}
-        <g className="loader-earth" transform="translate(76,72) scale(0.4)" fill="none" strokeLinecap="round" strokeLinejoin="round">
+        <g className="opacity-90" transform="translate(76,72) scale(0.4)" fill="none" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="60" cy="60" r="48" stroke="#FFFFFF" strokeWidth="2.5" />
           <path d="M12 60 C30 78, 90 78, 108 60" stroke="#FFFFFF" strokeWidth="2.5" />
           <path d="M60 12 C40 30, 40 90, 60 108" stroke="#dce8f5" strokeWidth="2" />
@@ -39,7 +42,6 @@ function LaunchLoader({ label = '読み込み中...', size = 'default' }) {
           <path d="M50 78 C56 76, 64 78, 62 84 C60 90, 66 94, 60 96" stroke="#dce8f5" strokeWidth="2" />
         </g>
 
-        {/* ロケット（軌道弧に沿って周回） */}
         <g transform="scale(0.22) rotate(90) translate(-40,-80)"
            fill="none" stroke="#FFFFFF" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
           <path d="M40 6 C50 22, 56 40, 56 58 L56 128 L24 128 L24 58 C24 40, 30 22, 40 6 Z" />
@@ -57,7 +59,9 @@ function LaunchLoader({ label = '読み込み中...', size = 'default' }) {
           </animateMotion>
         </g>
       </svg>
-      {label && <p className="launch-loader-label">{label}</p>}
+      {label && (
+        <p className={`text-muted ${isSmall ? 'mt-0 text-[0.78rem]' : 'mt-1 text-[0.84rem]'}`}>{label}</p>
+      )}
     </div>
   )
 }

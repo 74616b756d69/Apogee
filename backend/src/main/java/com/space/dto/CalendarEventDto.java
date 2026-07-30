@@ -9,6 +9,7 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class CalendarEventDto {
     private String uid;
+    private String rawUid;     // CalDAV 上の生 UID（更新・削除に使用）
     private String title;
     private String startTime;  // "HH:mm" または終日の場合 null
     private String endTime;

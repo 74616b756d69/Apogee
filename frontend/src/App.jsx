@@ -75,29 +75,33 @@ function App() {
   if (!authChecked || !authenticated) return null
 
   return (
-    <div className="app" style={accentStyle}>
-      <div className="pages" ref={scrollRef}>
-        {/* 今日 */}
-        <div className="page">
+    <div className="relative h-dvh overflow-hidden bg-body text-body-text" style={accentStyle}>
+      <div
+        className="flex h-full snap-x snap-mandatory overflow-x-auto [scrollbar-width:none] [-webkit-overflow-scrolling:touch] [&::-webkit-scrollbar]:hidden"
+        ref={scrollRef}
+      >
+        <div className="h-full w-screen min-w-screen shrink-0 snap-start overflow-y-auto">
           <TodayView onColorDetected={setAccentColor} pomo={pomo} setPomo={setPomo} />
         </div>
 
-        {/* カレンダー */}
-        <div className="page">
+        <div className="h-full w-screen min-w-screen shrink-0 snap-start overflow-y-auto">
           <CalendarView isActive={currentPage === 1} />
         </div>
 
-        {/* その他 */}
-        <div className="page">
+        <div className="h-full w-screen min-w-screen shrink-0 snap-start overflow-y-auto">
           <MoreView />
         </div>
       </div>
 
-      <div className="page-dots">
+      <div className="fixed bottom-[calc(18px+env(safe-area-inset-bottom))] left-1/2 z-50 flex -translate-x-1/2 gap-2">
         {PAGES.map((_, i) => (
           <button
             key={i}
-            className={`page-dot ${currentPage === i ? 'active' : ''}`}
+            className={`cursor-pointer border-0 p-0 transition-all duration-300 ease-in-out ${
+              currentPage === i
+                ? 'h-[7px] w-[22px] rounded bg-[rgba(var(--accent),1)] shadow-[0_0_12px_rgba(var(--accent),0.55)]'
+                : 'h-[7px] w-[7px] rounded-full bg-white/28'
+            }`}
             onClick={() => goToPage(i)}
             aria-label={`ページ ${i + 1}`}
           />
