@@ -4,6 +4,7 @@ import LaunchLoader from './LaunchLoader'
 
 const LAUNCH_PHASE_MS = 8000
 const TODAY_PHASE_MS  = 15000
+const LAUNCH_REFRESH_MS = 5 * 60 * 1000
 
 const HERO_ANIM = 'opacity-0 animate-slide-up [animation-fill-mode:both]'
 
@@ -60,6 +61,17 @@ function formatDateFull(dateStr) {
     year: 'numeric', month: 'long', day: 'numeric', weekday: 'long',
     timeZone: 'Asia/Tokyo',
   })
+}
+
+function formatUpdatedAt(date) {
+  if (!date) return '未取得'
+  return date.toLocaleTimeString('ja-JP', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    timeZone: 'Asia/Tokyo',
+    hour12: false,
+  }) + ' JST'
 }
 
 function CountUnit({ n, label, gold }) {
@@ -144,6 +156,7 @@ function TodayView({ onColorDetected, pomo, setPomo }) {
   const [calLoading, setCalLoading] = useState(true)
   const [showMap, setShowMap]       = useState(false)
   const [launchKey, setLaunchKey]   = useState(0)
+  const [launchUpdatedAt, setLaunchUpdatedAt] = useState(null)
   const [clock, setClock] = useState(() => new Date())
   const imgRef     = useRef(null)
   const pageRef    = useRef(null)
@@ -156,11 +169,34 @@ function TodayView({ onColorDetected, pomo, setPomo }) {
   const selectedLaunch = launches[selectedIdx] ?? null
   const heroUrl        = selectedLaunch?.imageUrl ?? null
 
-  useEffect(() => {
-    fetch('/api/launches/upcoming')
+  const loadUpcomingLaunches = () => {
+    fetch('/api/launches/upcoming', { cache: 'no-store' })
       .then(r => r.ok ? r.json() : Promise.reject())
-      .then(json => setLaunches(json))
+      .then(json => {
+        setLaunches(Array.isArray(json) ? json : [])
+        setLaunchUpdatedAt(new Date())
+      })
       .catch(() => {})
+  }
+
+  useEffect(() => {
+    loadUpcomingLaunches()
+
+    const id = setInterval(() => {
+      loadUpcomingLaunches()
+    }, LAUNCH_REFRESH_MS)
+
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        loadUpcomingLaunches()
+      }
+    }
+
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      clearInterval(id)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
   }, [])
 
   const dataLoaded = launches.length > 0
@@ -228,6 +264,9 @@ function TodayView({ onColorDetected, pomo, setPomo }) {
     <div className="flex min-h-full w-full flex-col bg-body" ref={pageRef}>
 
       <div className="relative h-dvh shrink-0 overflow-hidden">
+        <p className="absolute right-5 top-4 z-[3] text-[0.62rem] font-semibold tracking-[0.06em] text-white/55 sm:right-7 sm:top-5">
+          打ち上げデータ最終更新: {formatUpdatedAt(launchUpdatedAt)}
+        </p>
         {heroUrl ? (
           <img
             key={`bg-${launchKey}`}

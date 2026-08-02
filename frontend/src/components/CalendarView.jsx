@@ -77,6 +77,17 @@ function formatLaunchDate(dateStr) {
   }
 }
 
+function formatUpdatedAt(date) {
+  if (!date) return '未取得'
+  return date.toLocaleTimeString('ja-JP', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    timeZone: 'Asia/Tokyo',
+    hour12: false,
+  }) + ' JST'
+}
+
 function formatAgendaDate(key) {
   if (!key) return ''
   const [y, m, d] = key.split('-').map(Number)
@@ -99,6 +110,7 @@ function calcCountdown(net) {
 function pad2(n) { return String(n).padStart(2, '0') }
 
 const LAUNCH_COLOR = '#e06a3a'
+const LAUNCH_REFRESH_MS = 5 * 60 * 1000
 
 function CalendarView({ isActive }) {
   const [launches, setLaunches]       = useState([])
@@ -131,19 +143,43 @@ function CalendarView({ isActive }) {
   const [deleting, setDeleting]       = useState(false)
   const [collections, setCollections] = useState([])
   const [collectionsLoaded, setCollectionsLoaded] = useState(false)
+  const [launchUpdatedAt, setLaunchUpdatedAt] = useState(null)
 
   const activeKeyRef   = useRef(null)
   const eventsCacheRef = useRef({})
+
+  const loadUpcomingLaunches = () => {
+    fetch('/api/launches/upcoming', { cache: 'no-store' })
+      .then(res => res.ok ? res.json() : Promise.reject())
+      .then(json => {
+        setLaunches(Array.isArray(json) ? json : [])
+        setLaunchUpdatedAt(new Date())
+      })
+      .catch(() => {})
+  }
 
   useEffect(() => {
     localStorage.setItem('cal-show-launches', String(showLaunches))
   }, [showLaunches])
 
   useEffect(() => {
-    fetch('/api/launches/upcoming')
-      .then(res => res.ok ? res.json() : Promise.reject())
-      .then(json => setLaunches(json))
-      .catch(() => {})
+    loadUpcomingLaunches()
+
+    const id = setInterval(() => {
+      loadUpcomingLaunches()
+    }, LAUNCH_REFRESH_MS)
+
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        loadUpcomingLaunches()
+      }
+    }
+
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      clearInterval(id)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
   }, [])
 
   const featuredLaunch = launches[featuredIdx] ?? launches[0] ?? null
@@ -653,6 +689,11 @@ function CalendarView({ isActive }) {
 
       {/* 右パネル: 月/週グリッド */}
       <div className="order-1 md:order-2 md:flex-1 md:flex md:flex-col md:items-center md:justify-start md:px-8 md:py-5 md:overflow-hidden md:bg-[rgba(8,14,26,0.6)]">
+        <div className="px-5 pt-3 md:px-0 md:pt-0 md:max-w-[800px] md:w-full">
+          <p className="text-[0.64rem] font-semibold tracking-[0.06em] text-white/45">
+            打ち上げデータ最終更新: {formatUpdatedAt(launchUpdatedAt)}
+          </p>
+        </div>
         <div className="flex gap-1 px-5 pt-3 md:px-0 md:pt-0 md:pb-2 md:max-w-[800px] md:w-full">
           {[
             { mode: 'month', label: '月' },
