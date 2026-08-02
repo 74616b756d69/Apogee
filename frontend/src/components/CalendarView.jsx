@@ -689,12 +689,12 @@ function CalendarView({ isActive }) {
 
       {/* 右パネル: 月/週グリッド */}
       <div className="order-1 md:order-2 md:flex-1 md:flex md:flex-col md:items-center md:justify-start md:px-8 md:py-5 md:overflow-hidden md:bg-[rgba(8,14,26,0.6)]">
-        <div className="px-5 pt-3 md:px-0 md:pt-0 md:max-w-[800px] md:w-full">
+        <div className="px-5 pt-2 md:px-0 md:pt-0 md:max-w-[800px] md:w-full">
           <p className="text-[0.64rem] font-semibold tracking-[0.06em] text-white/45">
             打ち上げデータ最終更新: {formatUpdatedAt(launchUpdatedAt)}
           </p>
         </div>
-        <div className="flex gap-1 px-5 pt-3 md:px-0 md:pt-0 md:pb-2 md:max-w-[800px] md:w-full">
+        <div className="mt-1 flex gap-1 px-5 pt-1 md:mt-0 md:px-0 md:pt-0 md:pb-2 md:max-w-[800px] md:w-full">
           {[
             { mode: 'month', label: '月' },
             { mode: 'week', label: '週' },
