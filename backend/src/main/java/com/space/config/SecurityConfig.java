@@ -25,7 +25,7 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/api/auth/me").permitAll()
+                .requestMatchers("/api/auth/me", "/api/public/**", "/booking/**").permitAll()
                 .anyRequest().authenticated()
             )
             .oauth2Login(oauth2 -> oauth2
@@ -51,7 +51,7 @@ public class SecurityConfig {
                 csrf
                     .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
                     .csrfTokenRequestHandler(handler)
-                    .ignoringRequestMatchers("/api/auth/me", "/oauth2/**", "/login/**");
+                    .ignoringRequestMatchers("/api/auth/me", "/api/public/**", "/oauth2/**", "/login/**", "/booking/**");
             });
         return http.build();
     }
