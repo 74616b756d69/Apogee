@@ -7,8 +7,8 @@ import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
 import java.time.ZoneId;
-import java.time.ZonedDateTime;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -27,6 +27,11 @@ class AppleCalendarServiceTest {
         return new DateTime(java.util.Date.from(date.atStartOfDay(JST).toInstant()));
     }
 
+    private List<CalendarEventDto> parse(String ics, String calName, String color,
+                                         LocalDate from, LocalDate to) {
+        return service.parseOccurrences(ics, calName, color, toIcalDate(from), toIcalDate(to));
+    }
+
     @Test
     void parseSimpleTimedEvent() {
         String ics = """
@@ -42,18 +47,21 @@ class AppleCalendarServiceTest {
                 """;
 
         LocalDate date = LocalDate.of(2025, 7, 30);
-        List<CalendarEventDto> events = service.parseIcsForRange(
-                ics, "仕事", "#FF0000", toIcalDate(date), toIcalDate(date.plusDays(1)));
+        List<CalendarEventDto> events = parse(ics, "仕事", "#FF0000", date, date.plusDays(1));
 
         assertEquals(1, events.size());
         CalendarEventDto event = events.get(0);
         assertEquals("朝会", event.getTitle());
         assertEquals("10:00", event.getStartTime());
+        assertEquals("11:00", event.getEndTime(), "終了時刻が欠落しないこと");
+        assertEquals("2025-07-30T10:00:00+09:00", event.getStart());
+        assertEquals("2025-07-30T11:00:00+09:00", event.getEnd());
         assertFalse(event.isAllDay());
         assertEquals("仕事", event.getCalendarName());
         assertEquals("#FF0000", event.getCalendarColor());
         assertEquals("2025-07-30", event.getDate());
         assertTrue(event.getUid().contains("test-uid-1"));
+        assertEquals("test-uid-1", event.getRawUid());
     }
 
     @Test
@@ -71,8 +79,7 @@ class AppleCalendarServiceTest {
                 """;
 
         LocalDate date = LocalDate.of(2025, 7, 30);
-        List<CalendarEventDto> events = service.parseIcsForRange(
-                ics, "個人", null, toIcalDate(date), toIcalDate(date.plusDays(1)));
+        List<CalendarEventDto> events = parse(ics, "個人", null, date, date.plusDays(1));
 
         assertEquals(1, events.size());
         CalendarEventDto event = events.get(0);
@@ -80,10 +87,12 @@ class AppleCalendarServiceTest {
         assertTrue(event.isAllDay());
         assertNull(event.getStartTime());
         assertEquals("2025-07-30", event.getDate());
+        assertEquals("2025-07-30", event.getStart());
+        assertEquals("2025-07-31", event.getEnd(), "終日の end は排他的（翌日）であること");
     }
 
     @Test
-    void parseMultiDayAllDayEvent() {
+    void multiDayEventStaysOneSpan() {
         String ics = """
                 BEGIN:VCALENDAR
                 VERSION:2.0
@@ -98,17 +107,42 @@ class AppleCalendarServiceTest {
 
         LocalDate from = LocalDate.of(2025, 7, 28);
         LocalDate to = LocalDate.of(2025, 8, 1);
-        List<CalendarEventDto> events = service.parseIcsForRange(
-                ics, "個人", "#00FF00", toIcalDate(from), toIcalDate(to));
+        List<CalendarEventDto> events = parse(ics, "個人", "#00FF00", from, to);
 
-        assertEquals(4, events.size());
-        assertEquals("2025-07-28", events.get(0).getDate());
-        assertEquals("2025-07-29", events.get(1).getDate());
-        assertEquals("2025-07-30", events.get(2).getDate());
-        assertEquals("2025-07-31", events.get(3).getDate());
-        for (CalendarEventDto e : events) {
-            assertEquals("夏休み", e.getTitle());
-            assertTrue(e.isAllDay());
+        assertEquals(1, events.size(), "複数日イベントは1本のスパンとして保持されること");
+        CalendarEventDto span = events.get(0);
+        assertEquals("2025-07-28", span.getStart());
+        assertEquals("2025-08-01", span.getEnd());
+        assertEquals("2025-07-31", span.getEndDate(), "endDate は包含表現");
+        assertTrue(span.isAllDay());
+    }
+
+    @Test
+    void multiDayEventFansOutForLegacyDateKeyedApi() {
+        String ics = """
+                BEGIN:VCALENDAR
+                VERSION:2.0
+                BEGIN:VEVENT
+                UID:multiday-uid
+                DTSTART;VALUE=DATE:20250728
+                DTEND;VALUE=DATE:20250801
+                SUMMARY:夏休み
+                END:VEVENT
+                END:VCALENDAR
+                """;
+
+        LocalDate from = LocalDate.of(2025, 7, 28);
+        LocalDate to = LocalDate.of(2025, 8, 1);
+        Map<String, List<CalendarEventDto>> byDate =
+                service.fanOutByDate(parse(ics, "個人", "#00FF00", from, to), from, to);
+
+        assertEquals(4, byDate.size());
+        for (String key : List.of("2025-07-28", "2025-07-29", "2025-07-30", "2025-07-31")) {
+            List<CalendarEventDto> day = byDate.get(key);
+            assertNotNull(day, key + " に展開されること");
+            assertEquals(1, day.size());
+            assertEquals("夏休み", day.get(0).getTitle());
+            assertTrue(day.get(0).isAllDay());
         }
     }
 
@@ -127,10 +161,7 @@ class AppleCalendarServiceTest {
                 """;
 
         LocalDate date = LocalDate.of(2025, 7, 30);
-        List<CalendarEventDto> events = service.parseIcsForRange(
-                ics, "仕事", null, toIcalDate(date), toIcalDate(date.plusDays(1)));
-
-        assertTrue(events.isEmpty());
+        assertTrue(parse(ics, "仕事", null, date, date.plusDays(1)).isEmpty());
     }
 
     @Test
@@ -147,8 +178,7 @@ class AppleCalendarServiceTest {
                 """;
 
         LocalDate date = LocalDate.of(2025, 7, 30);
-        List<CalendarEventDto> events = service.parseIcsForRange(
-                ics, "個人", null, toIcalDate(date), toIcalDate(date.plusDays(1)));
+        List<CalendarEventDto> events = parse(ics, "個人", null, date, date.plusDays(1));
 
         assertEquals(1, events.size());
         assertEquals("（タイトルなし）", events.get(0).getTitle());
@@ -156,12 +186,8 @@ class AppleCalendarServiceTest {
 
     @Test
     void parseInvalidIcsReturnsEmpty() {
-        List<CalendarEventDto> events = service.parseIcsForRange(
-                "invalid data", "cal", null,
-                toIcalDate(LocalDate.of(2025, 7, 30)),
-                toIcalDate(LocalDate.of(2025, 7, 31)));
-
-        assertTrue(events.isEmpty());
+        assertTrue(parse("invalid data", "cal", null,
+                LocalDate.of(2025, 7, 30), LocalDate.of(2025, 7, 31)).isEmpty());
     }
 
     @Test
@@ -179,17 +205,20 @@ class AppleCalendarServiceTest {
                 END:VCALENDAR
                 """;
 
-        LocalDate from = LocalDate.of(2025, 7, 1);
-        LocalDate to = LocalDate.of(2025, 8, 1);
-        List<CalendarEventDto> events = service.parseIcsForRange(
-                ics, "仕事", "#0000FF", toIcalDate(from), toIcalDate(to));
+        List<CalendarEventDto> events =
+                parse(ics, "仕事", "#0000FF", LocalDate.of(2025, 7, 1), LocalDate.of(2025, 8, 1));
 
         assertTrue(events.size() >= 4);
         for (CalendarEventDto e : events) {
             assertEquals("週次ミーティング", e.getTitle());
             assertEquals("09:00", e.getStartTime());
             assertFalse(e.isAllDay());
+            assertTrue(e.isRecurring(), "繰り返しフラグが立つこと");
+            assertEquals("FREQ=WEEKLY;COUNT=5", e.getRrule());
+            assertNotNull(e.getRecurrenceId(), "各回に RECURRENCE-ID の基準値が付くこと");
         }
+        // 各回の recurrenceId は UTC 正準形で、回ごとに異なる
+        assertEquals(events.size(), events.stream().map(CalendarEventDto::getRecurrenceId).distinct().count());
     }
 
     @Test
@@ -219,13 +248,13 @@ class AppleCalendarServiceTest {
                 END:VCALENDAR
                 """;
 
-        LocalDate from = LocalDate.of(2026, 7, 1);
-        LocalDate to = LocalDate.of(2026, 8, 1);
-        List<CalendarEventDto> events = service.parseIcsForRange(
-                ics, "その他日程", null, toIcalDate(from), toIcalDate(to));
+        List<CalendarEventDto> events =
+                parse(ics, "その他日程", null, LocalDate.of(2026, 7, 1), LocalDate.of(2026, 8, 1));
 
         assertFalse(events.isEmpty(), "公欠申請ずみイベントがパースされること");
-        assertTrue(events.stream().anyMatch(e -> e.getDate().equals("2026-07-01")));
+        assertEquals("2026-07-01", events.get(0).getDate());
+        assertTrue(events.get(0).getReminders().isEmpty(),
+                "絶対日時トリガーは通知分数として解釈しないこと");
     }
 
     @Test
@@ -246,10 +275,8 @@ class AppleCalendarServiceTest {
                 + "END:VEVENT\r\n"
                 + "END:VCALENDAR\r\n";
 
-        LocalDate from = LocalDate.of(2026, 7, 1);
-        LocalDate to = LocalDate.of(2026, 8, 1);
-        List<CalendarEventDto> events = service.parseIcsForRange(
-                ics, "インターン", null, toIcalDate(from), toIcalDate(to));
+        List<CalendarEventDto> events =
+                parse(ics, "インターン", null, LocalDate.of(2026, 7, 1), LocalDate.of(2026, 8, 1));
 
         assertFalse(events.isEmpty(), "RELATED-TOがあっても繰り返し予定がパースされること");
     }
@@ -279,14 +306,80 @@ class AppleCalendarServiceTest {
                 END:VCALENDAR
                 """;
 
-        LocalDate from = LocalDate.of(2026, 8, 1);
-        LocalDate to = LocalDate.of(2026, 9, 1);
-        List<CalendarEventDto> events = service.parseIcsForRange(
-                ics, "インターン", "#00FF00", toIcalDate(from), toIcalDate(to));
+        List<CalendarEventDto> events =
+                parse(ics, "インターン", "#00FF00", LocalDate.of(2026, 8, 1), LocalDate.of(2026, 9, 1));
 
         assertTrue(events.stream().anyMatch(e -> e.getDate().equals("2026-08-17")),
                 "移動先の8/17にインターンの予定が表示されること");
         assertFalse(events.stream().anyMatch(e -> e.getDate().equals("2026-08-21")),
                 "移動元の8/21には幽霊予定が残らないこと");
+
+        CalendarEventDto moved = events.stream()
+                .filter(e -> e.getDate().equals("2026-08-17")).findFirst().orElseThrow();
+        assertTrue(moved.isOverridden(), "移動された回は上書き扱いとして識別できること");
+        assertEquals("20260821T010000Z", moved.getRecurrenceId(),
+                "RECURRENCE-ID は TZID 表記でも UTC 正準形に揃うこと");
+    }
+
+    @Test
+    void extractsDetailPropertiesAndReminders() {
+        String ics = """
+                BEGIN:VCALENDAR
+                VERSION:2.0
+                BEGIN:VEVENT
+                UID:detail-uid
+                DTSTART;TZID=Asia/Tokyo:20260805T130000
+                DTEND;TZID=Asia/Tokyo:20260805T140000
+                SUMMARY:打ち合わせ\\, 第2会議室
+                LOCATION:東京都港区\\;1-2-3
+                URL:https://example.com/meeting
+                DESCRIPTION:議題\\n1. 進捗\\n2. 課題
+                X-APPLE-CALENDAR-COLOR:#FF2D55
+                BEGIN:VALARM
+                ACTION:DISPLAY
+                TRIGGER;RELATED=START:-PT30M
+                END:VALARM
+                BEGIN:VALARM
+                ACTION:DISPLAY
+                TRIGGER;RELATED=START:-P1D
+                END:VALARM
+                END:VEVENT
+                END:VCALENDAR
+                """;
+
+        List<CalendarEventDto> events =
+                parse(ics, "仕事", "#0000FF", LocalDate.of(2026, 8, 5), LocalDate.of(2026, 8, 6));
+
+        assertEquals(1, events.size());
+        CalendarEventDto e = events.get(0);
+        assertEquals("打ち合わせ, 第2会議室", e.getTitle(), "エスケープが解除されること");
+        assertEquals("東京都港区;1-2-3", e.getLocation());
+        assertEquals("https://example.com/meeting", e.getUrl());
+        assertEquals("議題\n1. 進捗\n2. 課題", e.getNotes());
+        assertEquals("#FF2D55", e.getTagColor());
+        assertEquals(List.of(30, 1440), e.getReminders());
+    }
+
+    @Test
+    void parsesTriggerDurations() {
+        assertEquals(30, AppleCalendarService.parseTriggerMinutes("-PT30M"));
+        assertEquals(1440, AppleCalendarService.parseTriggerMinutes("-P1D"));
+        assertEquals(60, AppleCalendarService.parseTriggerMinutes("-PT1H"));
+        assertEquals(-15, AppleCalendarService.parseTriggerMinutes("PT15M"),
+                "開始後のトリガーは負値になること");
+        assertNull(AppleCalendarService.parseTriggerMinutes("19760401T005545Z"),
+                "絶対日時トリガーは分数に解釈しないこと");
+    }
+
+    @Test
+    void canonicalisesRecurrenceIdAcrossRepresentations() {
+        // 同じ瞬間を指す3つの表記が同一の正準形になること
+        String fromTzid = AppleCalendarService.canonicalRecurrenceId("20260821T100000", "Asia/Tokyo");
+        String fromUtc = AppleCalendarService.canonicalRecurrenceId("20260821T010000Z", null);
+        assertEquals(fromTzid, fromUtc);
+        assertEquals("20260821T010000Z", fromUtc);
+
+        assertEquals("20260821", AppleCalendarService.canonicalRecurrenceId("20260821", null),
+                "終日は日付のまま保つこと");
     }
 }
