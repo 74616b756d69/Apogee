@@ -89,9 +89,9 @@ public class AvailabilityService {
 
         // Generate available slots
         LocalTime current = dayStart;
-        for (LocalTime[] busy : busyIntervals) {
+        for (LocalTime[] interval : busyIntervals) {
             LocalTime slotEnd = current.plusMinutes(durationMinutes);
-            if (slotEnd.compareTo(busy[0]) <= 0) {
+            if (slotEnd.compareTo(interval[0]) <= 0) {
                 // Slot fits before this busy block
                 daySlots.add(new AvailabilitySlotDto(
                         date.toString(),
@@ -100,8 +100,8 @@ public class AvailabilityService {
                 ));
                 current = slotEnd;
             }
-            if (current.compareTo(busy[0]) < 0) {
-                current = busy[1];
+            if (current.compareTo(interval[0]) < 0) {
+                current = interval[1];
             }
         }
 

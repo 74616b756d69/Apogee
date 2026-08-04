@@ -28,6 +28,8 @@ public class BookingLinkService {
     private final AvailabilityService availabilityService;
     private final AppleCalendarService calendarService;
 
+    private static final java.time.ZoneId JST = java.time.ZoneId.of("Asia/Tokyo");
+
     @Transactional
     public BookingLinkDto createBookingLink(BookingLinkCreateDto dto) throws Exception {
         BookingLink link = new BookingLink();
@@ -99,12 +101,13 @@ public class BookingLinkService {
         }
 
         // Create CalDAV event
-        CalendarEventCreateDto eventDto = new CalendarEventCreateDto();
+        CalendarEventWriteDto eventDto = new CalendarEventWriteDto();
         eventDto.setTitle(dto.getGuestName() + " - " + link.getTitle());
-        eventDto.setDate(dto.getSlotDate());
-        eventDto.setStartTime(slotStart.format(DateTimeFormatter.ofPattern("HH:mm")));
-        eventDto.setEndTime(slotEnd.format(DateTimeFormatter.ofPattern("HH:mm")));
+        eventDto.setAllDay(false);
+        eventDto.setStart(LocalDate.parse(dto.getSlotDate()).atTime(slotStart).atZone(JST).toOffsetDateTime().toString());
+        eventDto.setEnd(LocalDate.parse(dto.getSlotDate()).atTime(slotEnd).atZone(JST).toOffsetDateTime().toString());
         eventDto.setCalendarName(link.getCalendarName());
+        eventDto.setNotes(dto.getGuestNote());
 
         calendarService.createEvent(eventDto);
 

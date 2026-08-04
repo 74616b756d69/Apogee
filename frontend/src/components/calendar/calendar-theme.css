@@ -1,0 +1,229 @@
+/*
+ * FullCalendar を既存のダークテーマへ寄せる。
+ * v6 は CSS 変数で大半を差し替えられるので、構造セレクタへの上書きは
+ * 変数で表現できないもの（余白・角丸・ドラッグ中の見た目）だけに留める。
+ */
+
+.apogee-calendar {
+  --fc-border-color: rgba(100, 160, 255, 0.12);
+  --fc-page-bg-color: transparent;
+  --fc-neutral-bg-color: rgba(255, 255, 255, 0.03);
+  --fc-neutral-text-color: #7a93b0;
+
+  --fc-today-bg-color: rgba(var(--accent), 0.07);
+  --fc-now-indicator-color: #ff453a;
+  --fc-non-business-color: rgba(4, 8, 16, 0.55);
+  --fc-highlight-color: rgba(var(--accent), 0.18);
+
+  --fc-event-bg-color: rgba(var(--accent), 0.85);
+  --fc-event-border-color: transparent;
+  --fc-event-text-color: #04101f;
+  --fc-event-selected-overlay-color: rgba(255, 255, 255, 0.18);
+
+  --fc-more-link-bg-color: rgba(255, 255, 255, 0.08);
+  --fc-more-link-text-color: #7ab8ff;
+
+  --fc-small-font-size: 0.72rem;
+
+  width: 100%;
+  height: 100%;
+  color: #dce8f5;
+  font-size: 0.82rem;
+}
+
+/* ── ヘッダー行（曜日） ─────────────────────── */
+
+.apogee-calendar .fc-col-header-cell {
+  padding: 6px 0;
+  background: rgba(4, 8, 16, 0.5);
+  font-weight: 700;
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  color: #7a93b0;
+}
+
+.apogee-calendar .fc-col-header-cell.fc-day-sun a { color: #ff8a8a; }
+.apogee-calendar .fc-col-header-cell.fc-day-sat a { color: #8ab8ff; }
+.apogee-calendar .fc-col-header-cell a { text-decoration: none; }
+
+/* ── 日付セル ───────────────────────────── */
+
+.apogee-calendar .fc-daygrid-day-number,
+.apogee-calendar .fc-timegrid-axis-cushion,
+.apogee-calendar .fc-timegrid-slot-label-cushion {
+  color: #97b0c8;
+  font-size: 0.72rem;
+  text-decoration: none;
+}
+
+/* 今日は Apple Calendar と同じく日付を青丸で囲う */
+.apogee-calendar .fc-day-today .fc-daygrid-day-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.55em;
+  height: 1.55em;
+  margin: 2px;
+  border-radius: 999px;
+  background: rgba(var(--accent), 1);
+  color: #04101f;
+  font-weight: 800;
+}
+
+.apogee-calendar .fc-daygrid-day.fc-day-other {
+  background: rgba(0, 0, 0, 0.18);
+}
+.apogee-calendar .fc-daygrid-day.fc-day-other .fc-daygrid-day-number {
+  opacity: 0.4;
+}
+
+/* ── イベント ───────────────────────────── */
+
+.apogee-calendar .fc-event {
+  border-radius: 5px;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.apogee-calendar .fc-event:focus-visible {
+  outline: 2px solid rgba(var(--accent), 0.9);
+  outline-offset: 1px;
+}
+
+.apogee-calendar .fc-event.apogee-pending {
+  opacity: 0.55;
+}
+
+/* 打ち上げ予定は読み取り専用なので、掴めないことを見た目で示す */
+.apogee-calendar .fc-event.apogee-launch {
+  cursor: default;
+}
+
+.apogee-calendar .fc-daygrid-dot-event {
+  padding: 1px 4px;
+  background: transparent;
+}
+.apogee-calendar .fc-daygrid-dot-event:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+.apogee-calendar .fc-daygrid-dot-event .fc-event-title {
+  font-weight: 600;
+  color: #dce8f5;
+}
+
+.apogee-calendar .fc-timegrid-event .fc-event-main {
+  padding: 2px 4px;
+}
+
+.apogee-calendar .fc-event-dragging,
+.apogee-calendar .fc-event-resizing {
+  opacity: 0.7;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+}
+
+/* ドラッグ中のプレビュー（ゴースト） */
+.apogee-calendar .fc-event-mirror {
+  opacity: 0.6 !important;
+  outline: 1px dashed rgba(var(--accent), 0.8);
+}
+
+/* ── 週/日ビューのタイムグリッド ─────────────── */
+
+/*
+ * スロットは 5 分刻み（ドラッグの分解能を細かく保つため）だが、そのまま見せると
+ * 罫線が密になりすぎる。1 時間 ≒ 68px を保ちつつ、罫線は 30 分ごとだけ描く。
+ */
+/* td の height は最小値としてしか効かない。行がテキスト行高に押し広げられないよう潰す。 */
+.apogee-calendar .fc-timegrid-slot {
+  height: 5.7px;
+  line-height: 0;
+  font-size: 0;
+  border-top-color: transparent;
+}
+
+/* 30 分（6 スロット）ごとに薄い線、1 時間ごとに通常の線 */
+.apogee-calendar .fc-timegrid-slot[data-time$=":30:00"] {
+  border-top-color: rgba(100, 160, 255, 0.07);
+}
+.apogee-calendar .fc-timegrid-slot[data-time$=":00:00"] {
+  border-top-color: var(--fc-border-color);
+}
+
+/*
+ * 時刻ラベルは 5.7px のセルに収まらないため、行の高さを押し広げないよう
+ * セルから浮かせて配置する。
+ */
+.apogee-calendar .fc-timegrid-slot-label {
+  position: relative;
+  vertical-align: top;
+}
+.apogee-calendar .fc-timegrid-slot-label-cushion {
+  position: absolute;
+  top: -7px;
+  left: 6px;
+  white-space: nowrap;
+  font-size: 0.72rem;
+  line-height: 1;
+}
+
+.apogee-calendar .fc-timegrid-now-indicator-arrow {
+  border-width: 5px 0 5px 6px;
+}
+
+.apogee-calendar .fc-timegrid-now-indicator-line {
+  border-width: 1.5px 0 0;
+}
+
+/* 終日エリアは横バー表示なので、行の詰まりを少し緩める */
+.apogee-calendar .fc-daygrid-body-natural .fc-daygrid-day-events {
+  margin-bottom: 2px;
+}
+
+.apogee-calendar .fc-timegrid-axis {
+  background: rgba(4, 8, 16, 0.5);
+}
+
+/* ── 「+X件」リンクとポップオーバー ──────────── */
+
+.apogee-calendar .fc-daygrid-more-link {
+  padding: 0 4px;
+  border-radius: 4px;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.apogee-calendar .fc-popover {
+  background: #0d1829;
+  border: 1px solid rgba(100, 160, 255, 0.2);
+  border-radius: 10px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+  z-index: 40;
+}
+.apogee-calendar .fc-popover-header {
+  background: rgba(255, 255, 255, 0.04);
+  color: #dce8f5;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+/* ── 選択中のハイライト ─────────────────────── */
+
+.apogee-calendar .fc-highlight {
+  border-radius: 5px;
+}
+
+/* ── スクロール ─────────────────────────── */
+
+.apogee-calendar .fc-scroller::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.apogee-calendar .fc-scroller::-webkit-scrollbar-thumb {
+  background: rgba(122, 184, 255, 0.25);
+  border-radius: 3px;
+}
+.apogee-calendar .fc-scroller::-webkit-scrollbar-track {
+  background: transparent;
+}
