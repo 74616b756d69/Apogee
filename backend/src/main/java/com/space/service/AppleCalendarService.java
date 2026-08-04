@@ -363,7 +363,10 @@ public class AppleCalendarService {
 
         if (allDay) {
             String d   = date.format(DateTimeFormatter.ofPattern("yyyyMMdd"));
-            String end = date.plusDays(1).format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+            LocalDate endDate = (dto.getEndDate() != null && !dto.getEndDate().isBlank())
+                    ? LocalDate.parse(dto.getEndDate())
+                    : date;
+            String end = endDate.plusDays(1).format(DateTimeFormatter.ofPattern("yyyyMMdd"));
             ics.append("DTSTART;VALUE=DATE:").append(d).append("\r\n")
                .append("DTEND;VALUE=DATE:").append(end).append("\r\n");
         } else {
@@ -436,7 +439,10 @@ public class AppleCalendarService {
 
         if (allDay) {
             String d   = date.format(DateTimeFormatter.ofPattern("yyyyMMdd"));
-            String end = date.plusDays(1).format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+            LocalDate endDate = (dto.getEndDate() != null && !dto.getEndDate().isBlank())
+                    ? LocalDate.parse(dto.getEndDate())
+                    : date;
+            String end = endDate.plusDays(1).format(DateTimeFormatter.ofPattern("yyyyMMdd"));
             ics.append("DTSTART;VALUE=DATE:").append(d).append("\r\n")
                .append("DTEND;VALUE=DATE:").append(end).append("\r\n");
         } else {

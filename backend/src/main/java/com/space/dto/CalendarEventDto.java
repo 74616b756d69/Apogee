@@ -16,5 +16,6 @@ public class CalendarEventDto {
     private boolean allDay;
     private String calendarName;
     private String calendarColor; // "#RRGGBB"
-    private String date; // "YYYY-MM-DD"
+    private String date;       // "YYYY-MM-DD" (開始日)
+    private String endDate;    // "YYYY-MM-DD" (終了日、複数日イベント用。nullで開始日と同じ)
 }

@@ -137,7 +137,7 @@ function CalendarView({ isActive }) {
 
   const [showSheet, setShowSheet]     = useState(false)
   const [editingEvent, setEditingEvent] = useState(null)
-  const [form, setForm]               = useState({ title: '', date: '', startTime: '', endTime: '', allDay: true, calendarName: '' })
+  const [form, setForm]               = useState({ title: '', date: '', endDate: '', startTime: '', endTime: '', allDay: true, calendarName: '' })
   const [submitting, setSubmitting]   = useState(false)
   const [submitError, setSubmitError] = useState(null)
   const [deleting, setDeleting]       = useState(false)
@@ -377,6 +377,7 @@ function CalendarView({ isActive }) {
       setForm({
         title: event.title || '',
         date: event.date || activeKey || todayKey,
+        endDate: event.endDate || '',
         startTime: event.startTime || '',
         endTime: event.endTime || '',
         allDay: event.allDay ?? true,
@@ -384,7 +385,7 @@ function CalendarView({ isActive }) {
       })
     } else {
       setEditingEvent(null)
-      setForm({ title: '', date: activeKey || todayKey, startTime: '', endTime: '', allDay: true, calendarName: collections[0]?.name || '' })
+      setForm({ title: '', date: activeKey || todayKey, endDate: '', startTime: '', endTime: '', allDay: true, calendarName: collections[0]?.name || '' })
     }
     setSubmitError(null)
     setShowSheet(true)
@@ -442,6 +443,7 @@ function CalendarView({ isActive }) {
           body: JSON.stringify({
             title:        form.title.trim(),
             date:         targetDate,
+            endDate:      form.endDate || null,
             startTime:    form.allDay ? null : (form.startTime || null),
             endTime:      form.allDay ? null : (form.endTime || null),
             calendarName: form.calendarName || null,
@@ -457,6 +459,7 @@ function CalendarView({ isActive }) {
           calendarName:  form.calendarName || null,
           calendarColor: selectedCol?.color || null,
           date:          targetDate,
+          endDate:       form.endDate || null,
         }
         const res = await fetch('/api/calendar/event', {
           method: 'POST',
@@ -464,6 +467,7 @@ function CalendarView({ isActive }) {
           body: JSON.stringify({
             title:        optimisticEvent.title,
             date:         targetDate,
+            endDate:      optimisticEvent.endDate,
             startTime:    optimisticEvent.startTime,
             endTime:      form.allDay ? null : (form.endTime || null),
             calendarName: form.calendarName || null,

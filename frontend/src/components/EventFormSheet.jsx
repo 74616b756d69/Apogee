@@ -51,13 +51,24 @@ function EventFormSheet({
           )}
 
           <div className="flex flex-col gap-2">
-            <label className="text-[0.75rem] font-semibold uppercase tracking-[0.06em] text-[#6a88a8]">日付</label>
+            <label className="text-[0.75rem] font-semibold uppercase tracking-[0.06em] text-[#6a88a8]">開始日</label>
             <input
               className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-[#dce8f5] outline-none focus:border-sky-400/40"
               type="date"
               value={form.date}
               onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
             />
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <label className="text-[0.75rem] font-semibold uppercase tracking-[0.06em] text-[#6a88a8]">終了日（複数日の場合）</label>
+            <input
+              className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-[#dce8f5] outline-none focus:border-sky-400/40"
+              type="date"
+              value={form.endDate || ''}
+              onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))}
+            />
+            <p className="text-[0.65rem] text-[#4a6480]">終日イベント限定。空白で開始日と同じ日です。</p>
           </div>
 
           <div className="flex flex-col gap-2">
