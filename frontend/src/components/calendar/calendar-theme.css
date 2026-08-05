@@ -89,6 +89,17 @@
   height: calc(100% / 6);
 }
 
+/*
+ * 上の 100%/6 はテーブルの高さが確定しているときだけ効く。
+ * 親の高さが決まらず FullCalendar が高さ 0 を渡してくる場面では割合が解決できず、
+ * 行が中身なりの高さ（＝予定の少ない前後月の週だけ低い）に戻ってしまう。
+ * td の height は最小値として働くので、全セルに同じ下限を置いて
+ * どちらの経路でも行がそろうようにする。割合が解決できるときは 100%/6 が上回る。
+ */
+.apogee-calendar .fc-dayGridMonth-view .fc-daygrid-body > table > tbody > tr > td {
+  height: 2.4em;
+}
+
 /* ── イベント ───────────────────────────── */
 
 .apogee-calendar .fc-event {
