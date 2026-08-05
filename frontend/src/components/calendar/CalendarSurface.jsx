@@ -71,7 +71,7 @@ function CalendarSurface({
   events,
   businessHours,
   showWeekNumbers,
-  maxEventsPerDay,
+  dayMaxEvents,
   onSelectRange,
   onEventClick,
   onEventChange,
@@ -244,7 +244,7 @@ function CalendarSurface({
         weekNumberFormat={{ week: 'numeric' }}
         fixedWeekCount
         showNonCurrentDates
-        dayMaxEvents={maxEventsPerDay}
+        dayMaxEvents={dayMaxEvents}
         moreLinkClick="popover"
         moreLinkText={n => `+${n}件`}
         eventTimeFormat={{ hour: '2-digit', minute: '2-digit', hour12: false }}

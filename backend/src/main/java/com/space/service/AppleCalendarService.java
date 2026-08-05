@@ -410,7 +410,11 @@ public class AppleCalendarService {
             """;
         String xml = sendWebDav("PROPFIND", calHome, body, "1");
         if (xml == null) return List.of();
+        return parseCollections(xml);
+    }
 
+    /** PROPFIND のマルチステータス応答を CollectionInfo に変換する。 */
+    List<CollectionInfo> parseCollections(String xml) throws Exception {
         List<CollectionInfo> infos = new ArrayList<>();
         Document doc = parseXml(xml);
         NodeList responses = doc.getElementsByTagNameNS("DAV:", "response");
