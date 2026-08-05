@@ -23,7 +23,14 @@ const VIEW_MODES = [
   { mode: 'year', label: '年' },
 ]
 
-const MAX_EVENTS_PER_DAY = 4
+/**
+ * 1 日に表示するイベントの上限。
+ *
+ * true は「行の高さに収まるだけ表示し、あふれた分は +N件 にまとめる」という指定。
+ * 数値にすると FullCalendar が unbalanced モードになり、イベント枠が行の高さを
+ * 押し広げるため、予定の多い週だけ縦に広がって週ごとの高さが揃わなくなる。
+ */
+const DAY_MAX_EVENTS = true
 const TIMELINE_DAYS = 7
 
 /** 打ち上げ情報を、カレンダーと同じ形の読み取り専用イベントにする。 */
@@ -361,7 +368,7 @@ const CalendarWorkspace = forwardRef(function CalendarWorkspace(
             currentDate={currentDate}
             events={visibleEvents}
             showWeekNumbers={showWeekNumbers}
-            maxEventsPerDay={MAX_EVENTS_PER_DAY}
+            dayMaxEvents={DAY_MAX_EVENTS}
             businessHours={businessHoursEnabled
               ? { daysOfWeek: [0, 1, 2, 3, 4, 5, 6], startTime: businessHours.start, endTime: businessHours.end }
               : false}

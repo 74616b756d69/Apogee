@@ -60,6 +60,8 @@ import java.util.function.Supplier;
 public class AppleCalendarService {
 
     private static final String BASE_URL = "https://caldav.icloud.com";
+    static final String COMP_VEVENT = "VEVENT";
+    static final String COMP_VTODO = "VTODO";
     private static final ZoneId JST = ZoneId.of("Asia/Tokyo");
     private static final ZoneId UTC = ZoneId.of("UTC");
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HH:mm");
@@ -85,7 +87,19 @@ public class AppleCalendarService {
     @Value("${apple.calendar.password:}")
     private String password;
 
-    private record CollectionInfo(String url, String displayName, String color) {}
+    /**
+     * CalDAV コレクション 1 件。
+     *
+     * <p>{@code components} は supported-calendar-component-set の中身で、iCloud では
+     * カレンダーが VEVENT、リマインダーリストが VTODO を返す。両者は同じ calendar-home に
+     * 並んでいるため、これで区別しないとリマインダーリストがカレンダー一覧に混ざる。
+     * サーバがこのプロパティを返さない場合は VEVENT とみなす。
+     */
+    record CollectionInfo(String url, String displayName, String color, Set<String> components) {
+        boolean supports(String component) {
+            return components.contains(component);
+        }
+    }
 
     /** rawUid から CalDAV リソースの実 URL と ETag を引くための索引。 */
     private record ResourceRef(String collectionUrl, String href, String etag, String calendarName) {}
@@ -137,7 +151,7 @@ public class AppleCalendarService {
         connManager.close();
     }
 
-    private boolean configured() {
+    boolean configured() {
         return !username.isBlank() && !password.isBlank();
     }
 
@@ -182,7 +196,7 @@ public class AppleCalendarService {
     public List<Map<String, String>> getCollections() {
         if (!configured()) return List.of();
         try {
-            return getCachedCollections().stream()
+            return eventCollections().stream()
                     .map(c -> Map.of(
                             "name", c.displayName(),
                             "color", c.color() != null ? c.color() : "#4a9eff"))
@@ -289,7 +303,7 @@ public class AppleCalendarService {
 
     private List<CalendarEventDto> fetchRange(LocalDate from, LocalDate toExclusive) {
         try {
-            List<CollectionInfo> collections = getCachedCollections();
+            List<CollectionInfo> collections = eventCollections();
             if (collections.isEmpty()) return List.of();
 
             Map<String, CalendarEventDto> merged = new ConcurrentHashMap<>();
@@ -323,6 +337,19 @@ public class AppleCalendarService {
     }
 
     // ── コレクション探索（キャッシュ付き） ───────────────
+
+    /** VEVENT を扱えるコレクション（＝カレンダー）。 */
+    private List<CollectionInfo> eventCollections() throws Exception {
+        return getCachedCollections().stream().filter(c -> c.supports(COMP_VEVENT)).toList();
+    }
+
+    /**
+     * VTODO を扱えるコレクション（＝リマインダーリスト）。
+     * タスク機能（{@link TaskService}）から利用する。
+     */
+    List<CollectionInfo> todoCollections() throws Exception {
+        return getCachedCollections().stream().filter(c -> c.supports(COMP_VTODO)).toList();
+    }
 
     private synchronized List<CollectionInfo> getCachedCollections() throws Exception {
         long now = System.currentTimeMillis();
@@ -377,12 +404,17 @@ public class AppleCalendarService {
                 <d:resourcetype/>
                 <d:displayname/>
                 <ical:calendar-color/>
+                <c:supported-calendar-component-set/>
               </d:prop>
             </d:propfind>
             """;
         String xml = sendWebDav("PROPFIND", calHome, body, "1");
         if (xml == null) return List.of();
+        return parseCollections(xml);
+    }
 
+    /** PROPFIND のマルチステータス応答を CollectionInfo に変換する。 */
+    List<CollectionInfo> parseCollections(String xml) throws Exception {
         List<CollectionInfo> infos = new ArrayList<>();
         Document doc = parseXml(xml);
         NodeList responses = doc.getElementsByTagNameNS("DAV:", "response");
@@ -408,8 +440,18 @@ public class AppleCalendarService {
                 else if (raw.startsWith("#") && raw.length() == 7) color = raw;
             }
 
-            log.debug("Discovered calendar collection: href={}, displayName={}", href, displayName);
-            infos.add(new CollectionInfo(href, displayName, color));
+            Set<String> components = new LinkedHashSet<>();
+            NodeList compNodes = resp.getElementsByTagNameNS("urn:ietf:params:xml:ns:caldav", "comp");
+            for (int c = 0; c < compNodes.getLength(); c++) {
+                String name = ((Element) compNodes.item(c)).getAttribute("name");
+                if (name != null && !name.isBlank()) components.add(name.trim().toUpperCase(Locale.ROOT));
+            }
+            // プロパティ非対応のサーバでも従来どおりカレンダーとして扱えるようにする
+            if (components.isEmpty()) components.add(COMP_VEVENT);
+
+            log.debug("Discovered calendar collection: href={}, displayName={}, components={}",
+                    href, displayName, components);
+            infos.add(new CollectionInfo(href, displayName, color, Set.copyOf(components)));
         }
         return infos;
     }
@@ -475,7 +517,7 @@ public class AppleCalendarService {
     List<CalendarEventDto> parseOccurrences(String icsData, String calendarName, String calendarColor,
                                             net.fortuna.ical4j.model.Date rangeStart,
                                             net.fortuna.ical4j.model.Date rangeEnd) {
-        return parseOccurrences(icsData, new CollectionInfo("", calendarName, calendarColor),
+        return parseOccurrences(icsData, new CollectionInfo("", calendarName, calendarColor, Set.of(COMP_VEVENT)),
                 null, null, rangeStart, rangeEnd);
     }
 
@@ -936,12 +978,12 @@ public class AppleCalendarService {
         return copy;
     }
 
-    private void requireConfigured() throws Exception {
+    void requireConfigured() throws Exception {
         if (!configured()) throw new IllegalStateException("Apple Calendar credentials not configured");
     }
 
     private CollectionInfo resolveCollection(String calendarName) throws Exception {
-        List<CollectionInfo> collections = getCachedCollections();
+        List<CollectionInfo> collections = eventCollections();
         if (collections.isEmpty()) throw new IllegalStateException("No calendar collections found");
         if (calendarName == null || calendarName.isBlank()) return collections.get(0);
         return collections.stream()
@@ -959,7 +1001,7 @@ public class AppleCalendarService {
         ResourceRef known = resourceIndex.get(rawUid);
         if (known != null) return known;
 
-        List<CollectionInfo> collections = getCachedCollections();
+        List<CollectionInfo> collections = eventCollections();
         if (collections.isEmpty()) throw new IllegalStateException("No calendar collections found");
 
         List<CollectionInfo> ordered = new ArrayList<>();
@@ -1017,9 +1059,9 @@ public class AppleCalendarService {
 
     // ── CalDAV の HTTP 操作 ──────────────────────────
 
-    private record FetchedIcs(String body, String etag) {}
+    record FetchedIcs(String body, String etag) {}
 
-    private FetchedIcs getIcs(String url) throws Exception {
+    FetchedIcs getIcs(String url) throws Exception {
         HttpUriRequestBase req = new HttpUriRequestBase("GET", URI.create(url));
         req.setHeader("Authorization", basicAuth());
         return sharedHttpClient.execute(req, resp -> {
@@ -1034,7 +1076,7 @@ public class AppleCalendarService {
         });
     }
 
-    private void putIcs(String url, String ics, String ifMatch) throws Exception {
+    void putIcs(String url, String ics, String ifMatch) throws Exception {
         HttpUriRequestBase req = new HttpUriRequestBase("PUT", URI.create(url));
         req.setHeader("Authorization", basicAuth());
         req.setHeader("Content-Type", "text/calendar; charset=utf-8");
@@ -1056,7 +1098,7 @@ public class AppleCalendarService {
         });
     }
 
-    private void deleteResource(String url, String ifMatch) throws Exception {
+    void deleteResource(String url, String ifMatch) throws Exception {
         HttpUriRequestBase req = new HttpUriRequestBase("DELETE", URI.create(url));
         req.setHeader("Authorization", basicAuth());
         if (ifMatch != null && !ifMatch.isBlank()) {
@@ -1076,7 +1118,7 @@ public class AppleCalendarService {
 
     private static final String REDIRECT_PREFIX = "REDIRECT:";
 
-    private String sendWebDav(String method, String url, String body, String depth) throws Exception {
+    String sendWebDav(String method, String url, String body, String depth) throws Exception {
         String currentUrl = url;
         for (int hop = 0; hop < 6; hop++) {
             final String reqUrl = currentUrl;
@@ -1121,7 +1163,7 @@ public class AppleCalendarService {
 
     // ── XML / URL ユーティリティ ──────────────────────
 
-    private Document parseXml(String xml) throws Exception {
+    Document parseXml(String xml) throws Exception {
         DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
         factory.setNamespaceAware(true);
         factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
@@ -1137,7 +1179,7 @@ public class AppleCalendarService {
      * getElementsByTagNameNS を親要素で呼ぶと入れ子の別 response まで拾うことがあるため、
      * 対象 response のサブツリー内で最初に見つかったものを使う。
      */
-    private static String firstChildText(Element parent, String ns, String localName) {
+    static String firstChildText(Element parent, String ns, String localName) {
         NodeList nodes = parent.getElementsByTagNameNS(ns, localName);
         if (nodes.getLength() == 0) return null;
         Node node = nodes.item(0);
@@ -1145,7 +1187,7 @@ public class AppleCalendarService {
         return text == null ? null : text.trim();
     }
 
-    private static String stripQuotes(String etag) {
+    static String stripQuotes(String etag) {
         if (etag == null) return null;
         String v = etag.trim();
         if (v.startsWith("W/")) v = v.substring(2);
@@ -1153,16 +1195,16 @@ public class AppleCalendarService {
         return v.isBlank() ? null : v;
     }
 
-    private static String absolutize(String href) {
+    static String absolutize(String href) {
         if (href == null) return null;
         return href.startsWith("/") ? BASE_URL + href : href;
     }
 
-    private static String joinPath(String collectionUrl, String name) {
+    static String joinPath(String collectionUrl, String name) {
         return collectionUrl.endsWith("/") ? collectionUrl + name : collectionUrl + "/" + name;
     }
 
-    private static String escapeXml(String value) {
+    static String escapeXml(String value) {
         return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }
 

@@ -1,43 +1,9 @@
-// /api/calendar への薄いクライアント。
-// Spring Security の CSRF トークンは Cookie に入るので、書き込み系でヘッダに載せ替える。
+// /api/calendar への薄いクライアント。CSRF とエラー整形は http.js に共通化してある。
 
-function csrfHeaders() {
-  const m = document.cookie.match(/(?:^|;\s*)XSRF-TOKEN=([^;]+)/)
-  return m ? { 'X-XSRF-TOKEN': decodeURIComponent(m[1]) } : {}
-}
+import { ApiError, request } from './http'
 
-export class CalendarApiError extends Error {
-  constructor(message, status) {
-    super(message)
-    this.name = 'CalendarApiError'
-    this.status = status
-    this.isConflict = status === 409
-  }
-}
-
-async function request(url, options = {}) {
-  const res = await fetch(url, {
-    ...options,
-    headers: {
-      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
-      ...csrfHeaders(),
-      ...options.headers,
-    },
-  })
-  if (!res.ok) {
-    let message = `${res.status}`
-    try {
-      const body = await res.json()
-      if (body?.message) message = body.message
-    } catch {
-      // レスポンスが JSON でない場合はステータスだけで判断する
-    }
-    throw new CalendarApiError(message, res.status)
-  }
-  if (res.status === 204) return null
-  const text = await res.text()
-  return text ? JSON.parse(text) : null
-}
+/** 既存の呼び出し側との互換のため名前を残す。実体は共通の ApiError。 */
+export { ApiError as CalendarApiError }
 
 /** 期間内のイベント。end は排他的。 */
 export function fetchEvents(startKey, endKey) {

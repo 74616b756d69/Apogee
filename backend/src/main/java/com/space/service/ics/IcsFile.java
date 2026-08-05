@@ -13,14 +13,30 @@ import java.util.List;
  * それ以外の行は一切触らずに素通しする。
  *
  * <p>入力は RFC 5545 の行折り返しを解除（unfold）した状態で保持し、出力時に再度折り返す。
+ *
+ * <p>切り出す対象のコンポーネントは {@link #parse(String, String)} で指定する。VEVENT
+ * （カレンダー）と VTODO（リマインダー）で同じ編集戦略を使うため、名前だけを差し替える。
  */
 public final class IcsFile {
 
+    /** 既定で切り出すコンポーネント。 */
+    public static final String VEVENT = "VEVENT";
+    /** リマインダー（タスク）用コンポーネント。 */
+    public static final String VTODO = "VTODO";
+
+    private final String component;
     private final List<String> prologue = new ArrayList<>();
     private final List<VEventBlock> events = new ArrayList<>();
     private final List<String> epilogue = new ArrayList<>();
 
-    private IcsFile() {}
+    private IcsFile(String component) {
+        this.component = component;
+    }
+
+    /** このファイルが切り出しているコンポーネント名（"VEVENT" / "VTODO"）。 */
+    public String component() {
+        return component;
+    }
 
     public List<VEventBlock> events() {
         return events;
@@ -52,21 +68,29 @@ public final class IcsFile {
         events.remove(block);
     }
 
+    /** VEVENT を切り出す。 */
     public static IcsFile parse(String raw) {
-        IcsFile file = new IcsFile();
+        return parse(raw, VEVENT);
+    }
+
+    /** 指定コンポーネント（VEVENT / VTODO）を切り出す。それ以外の行は前後にそのまま温存する。 */
+    public static IcsFile parse(String raw, String component) {
+        IcsFile file = new IcsFile(component);
+        String begin = "BEGIN:" + component;
+        String end = "END:" + component;
         List<String> lines = unfold(raw);
 
         List<String> current = null;
         boolean afterEvents = false;
         for (String line : lines) {
-            if (line.equalsIgnoreCase("BEGIN:VEVENT")) {
+            if (line.equalsIgnoreCase(begin)) {
                 current = new ArrayList<>();
                 current.add(line);
                 continue;
             }
             if (current != null) {
                 current.add(line);
-                if (line.equalsIgnoreCase("END:VEVENT")) {
+                if (line.equalsIgnoreCase(end)) {
                     file.events.add(new VEventBlock(current));
                     current = null;
                     afterEvents = true;
@@ -75,9 +99,9 @@ public final class IcsFile {
             }
             (afterEvents ? file.epilogue : file.prologue).add(line);
         }
-        // BEGIN:VEVENT があって END:VEVENT が来ないまま終端した場合も落とさない
+        // BEGIN があって END が来ないまま終端した場合も落とさない
         if (current != null) {
-            current.add("END:VEVENT");
+            current.add(end);
             file.events.add(new VEventBlock(current));
         }
         return file;

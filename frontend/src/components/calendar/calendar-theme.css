@@ -77,6 +77,18 @@
   opacity: 0.4;
 }
 
+/* ── 月ビューの週行 ─────────────────────── */
+
+/*
+ * 月グリッドは高さを指定した <table> なので、ブラウザは余った高さを
+ * 各行の中身の高さに比例して配る。そのままだと予定の多い週だけ縦に広がるため、
+ * fixedWeekCount で常に 6 週ある前提で高さを均等割りし、週ごとの差をなくす。
+ * あふれた予定は dayMaxEvents={true} により「+N件」へまとめられる。
+ */
+.apogee-calendar .fc-dayGridMonth-view .fc-daygrid-body > table > tbody > tr {
+  height: calc(100% / 6);
+}
+
 /* ── イベント ───────────────────────────── */
 
 .apogee-calendar .fc-event {

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import LocationMapModal from './LocationMapModal'
 import LaunchLoader from './LaunchLoader'
+import TaskSection from './TaskSection'
 
 const LAUNCH_PHASE_MS = 8000
 const TODAY_PHASE_MS  = 15000
@@ -394,6 +395,10 @@ function TodayView({ onColorDetected, pomo, setPomo }) {
             </div>
           </div>
         )}
+      </div>
+
+      <div className={`bg-[#06090f] ${launches.length > 1 ? '' : 'pb-[calc(72px+env(safe-area-inset-bottom))]'}`}>
+        <TaskSection />
       </div>
 
       {launches.length > 1 && (
