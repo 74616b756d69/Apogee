@@ -326,8 +326,15 @@ function CalendarView({ isActive }) {
         )}
       </div>
 
-      {/* 右パネル: カレンダー本体 */}
-      <div className="order-1 flex min-h-[70vh] flex-col px-4 pt-2 md:order-2 md:min-h-0 md:flex-1 md:overflow-hidden md:bg-[rgba(8,14,26,0.6)] md:px-6 md:py-4">
+      {/*
+        右パネル: カレンダー本体。
+        狭幅では min-height だけだとこのパネルの高さが確定せず、FullCalendar に
+        高さ 0 が渡って月グリッドが潰れる（週の高さが中身なりになる）。高さを
+        確定値で与える。ツールバーが 2 段になる小さい端末でも月グリッドが
+        潰れないよう画面のほぼ全高を使い、続きのアジェンダはスクロールで見せる。
+        md 以上は従来どおり flex-1 で親の高さを分け合う。
+      */}
+      <div className="order-1 flex h-[92dvh] flex-col px-4 pt-2 md:order-2 md:h-auto md:min-h-0 md:flex-1 md:overflow-hidden md:bg-[rgba(8,14,26,0.6)] md:px-6 md:py-4">
         <p className="mb-1 shrink-0 text-[0.64rem] font-semibold tracking-[0.06em] text-white/45">
           打ち上げデータ最終更新: {formatUpdatedAt(launchesUpdatedAt)}
         </p>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import FullCalendar from '@fullcalendar/react'
 import dayGridPlugin from '@fullcalendar/daygrid'
 import timeGridPlugin from '@fullcalendar/timegrid'
@@ -24,6 +24,16 @@ const VIEW_BY_MODE = {
  */
 const SLOT_DURATION = '00:05:00'
 const COARSE_SNAP_MINUTES = 15
+
+/**
+ * 高さを実測できなかったときに使うフォールバック（px）。
+ *
+ * 高さを height="100%" で親任せにすると、親の高さが確定しない場面で
+ * FullCalendar が 0 を掴んでしまい、月グリッドが「行＝中身なりの高さ」に落ちる。
+ * その状態では予定が 1 件あるだけで週の高さがずれるため、こちらで実測した
+ * ピクセル値を必ず渡す。
+ */
+const FALLBACK_HEIGHT = 360
 
 /**
  * 正規化イベント → FullCalendar のイベントオブジェクト。
@@ -81,6 +91,29 @@ function CalendarSurface({
 }) {
   const innerRef = useRef(null)
   const api = () => innerRef.current?.getApi() ?? null
+
+  /*
+   * 描画領域の高さを自分で測り、ピクセルで FullCalendar に渡す。
+   * こうしておけば expandRows が必ず有効になり、月グリッドは
+   * 6 週を等分した高さで描かれる（＝予定の件数で週の高さが変わらない）。
+   */
+  const wrapRef = useRef(null)
+  const [height, setHeight] = useState(FALLBACK_HEIGHT)
+  useEffect(() => {
+    const el = wrapRef.current
+    if (!el) return
+    const measure = () => {
+      // 実測できたらその値をそのまま使う。下限を噛ませると、狭い画面で
+      // 領域より高いカレンダーが描かれて下の要素へはみ出す。
+      const measured = Math.round(el.clientHeight)
+      const next = measured > 0 ? measured : FALLBACK_HEIGHT
+      setHeight(prev => (prev === next ? prev : next))
+    }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
 
   // FullCalendar がコールバックに渡す jsEvent は、操作の種類によって
   // 修飾キーの状態を持たないことがある。自前で押下状態を追って判定に使う。
@@ -196,7 +229,7 @@ function CalendarSurface({
   }, [onDatesChange, onViewDateChange])
 
   return (
-    <div className="apogee-calendar">
+    <div className="apogee-calendar" ref={wrapRef}>
       <FullCalendar
         ref={innerRef}
         plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
@@ -204,7 +237,7 @@ function CalendarSurface({
         initialDate={currentDate}
         locale={jaLocale}
         headerToolbar={false}
-        height="100%"
+        height={height}
         expandRows
 
         events={fcEvents}
