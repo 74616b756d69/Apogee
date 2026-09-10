@@ -1,3 +1,6 @@
+<!-- tech-stack-badges -->
+![Java](https://img.shields.io/badge/Java-ED8B00?style=for-the-badge&logo=openjdk&logoColor=white) ![JavaScript](https://img.shields.io/badge/JavaScript-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black) ![HTML5](https://img.shields.io/badge/HTML5-E34F26?style=for-the-badge&logo=html5&logoColor=white) ![CSS3](https://img.shields.io/badge/CSS3-1572B6?style=for-the-badge&logo=css3&logoColor=white) ![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)
+
 # Space
 
 Space は、宇宙打ち上げ情報を見ながら、日々の予定・学習・リラックスの時間を一つの画面で管理できる、宇宙好き向けの Web アプリケーションです。
@@ -33,9 +36,10 @@ Space は、宇宙打ち上げ情報を見ながら、日々の予定・学習�
 
 - 直近の宇宙打ち上げをカウントダウン形式で確認できる
 - 過去・予定の打ち上げを時系列で見ることができる
-- 宇宙機関の一覧を検索して閲覧できる
+- 研究機関の一覧を検索して閲覧できる
 - 打ち上げ統計を確認できる
 - Apple Calendar と連携して、打ち上げ日や予定を確認・追加できる
+- Apple リマインダーと連携して、タスクを確認・追加・完了できる
 - ポモドーロタイマーで作業と休憩を管理できる
 
 ---
@@ -51,18 +55,26 @@ Space は、宇宙打ち上げ情報を見ながら、日々の予定・学習�
 - 次の打ち上げを大きなヒーロー画面で表示
 - 打ち上げまでの時間をカウントダウン
 - その日の Apple Calendar イベントを表示
+- タスク一覧を表示（今日 / 未完了 / 予定 / 完了で絞り込み）
 - ポモドーロタイマーを表示
 
-### 3. カレンダー機能
+### 3. タスク機能
+- Apple リマインダー (CalDAV VTODO) と双方向で連携
+- タスクの追加・完了・削除に対応し、純正リマインダーアプリと同期する
+- 期限、優先度（高・中・低）、リスト（色付き）を表示
+- 時間ブロック（`DTSTART` + `DUE`）に対応。時刻を持つタスクは開始・終了時刻を表示する
+- カレンダーと同じアカウント設定（アプリ専用パスワード）をそのまま使う
+
+### 4. カレンダー機能
 - 指定した日付のカレンダーイベントを表示
 - Apple Calendar (CalDAV) へのイベント追加に対応
 - 予定と打ち上げを同じ画面で確認できる
 
-### 4. 宇宙機関一覧
-- 宇宙機関・企業の一覧を表示
+### 5. 研究機関一覧
+- 研究機関・企業の一覧を表示
 - 名称・略称で検索可能
 
-### 5. 統計画面
+### 6. 統計画面
 - 打ち上げ予定数、過去実績数、成功率を表示
 - ロケット別・打ち上げ拠点別・ミッションタイプ別の集計を表示
 
@@ -173,13 +185,20 @@ MySQL は Docker Compose で起動するか、ローカルの MySQL に接続で
 - `GET /api/launches/previous` : 過去の打ち上げ一覧
 - `GET /api/launches/{id}/news` : 指定打ち上げに関連するニュース
 
-### 宇宙機関
-- `GET /api/agencies` : 宇宙機関一覧
+### 研究機関
+- `GET /api/agencies` : 研究機関一覧
 
 ### Apple Calendar
 - `GET /api/calendar/today` : 今日のイベント一覧
 - `GET /api/calendar/date?date=YYYY-MM-DD` : 指定日のイベント一覧
 - `POST /api/calendar/event` : イベント追加
+
+### タスク（Apple リマインダー）
+- `GET /api/tasks?filter=open` : タスク一覧（`open` / `today` / `overdue` / `upcoming` / `completed` / `all`）
+- `GET /api/tasks/lists` : リマインダーリスト一覧（名前・色）
+- `POST /api/tasks` : タスク追加
+- `PATCH /api/tasks/{rawUid}` : 部分更新（null は変更なし、空文字で解除）
+- `DELETE /api/tasks/{rawUid}` : タスク削除
 
 ---
 
