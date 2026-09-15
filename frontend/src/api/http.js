@@ -1,10 +1,4 @@
 // バックエンド API への薄いクライアント。
-// Spring Security の CSRF トークンは Cookie に入るので、書き込み系でヘッダに載せ替える。
-
-function csrfHeaders() {
-  const m = document.cookie.match(/(?:^|;\s*)XSRF-TOKEN=([^;]+)/)
-  return m ? { 'X-XSRF-TOKEN': decodeURIComponent(m[1]) } : {}
-}
 
 export class ApiError extends Error {
   constructor(message, status) {
@@ -20,7 +14,6 @@ export async function request(url, options = {}) {
     ...options,
     headers: {
       ...(options.body ? { 'Content-Type': 'application/json' } : {}),
-      ...csrfHeaders(),
       ...options.headers,
     },
   })

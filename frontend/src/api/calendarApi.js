@@ -1,4 +1,4 @@
-// /api/calendar への薄いクライアント。CSRF とエラー整形は http.js に共通化してある。
+// /api/calendar への薄いクライアント。エラー整形は http.js に共通化してある。
 
 import { ApiError, request } from './http'
 

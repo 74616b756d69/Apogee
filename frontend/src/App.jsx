@@ -25,8 +25,6 @@ function loadFocusStats() {
 }
 
 function App() {
-  const [authChecked, setAuthChecked] = useState(false)
-  const [authenticated, setAuthenticated] = useState(false)
   const [currentPage, setCurrentPage] = useState(0)
   const [accentColor, setAccentColor] = useState(null)
   const [pomo, setPomo] = useState({ mode: 'work', secs: 25 * 60, running: false, count: 0 })
@@ -35,25 +33,6 @@ function App() {
   const [calEvents, setCalEvents] = useState([])
   const scrollRef = useRef(null)
   const prevPomoCount = useRef(0)
-
-  useEffect(() => {
-    fetch('/api/auth/me')
-      .then(res => {
-        if (res.ok) return res.json()
-        throw new Error('not authenticated')
-      })
-      .then(data => {
-        if (data.authenticated) {
-          setAuthenticated(true)
-        } else {
-          window.location.href = '/oauth2/authorization/google'
-        }
-      })
-      .catch(() => {
-        window.location.href = '/oauth2/authorization/google'
-      })
-      .finally(() => setAuthChecked(true))
-  }, [])
 
   useEffect(() => {
     if (!pomo.running) return
@@ -116,7 +95,7 @@ function App() {
     }
     el.addEventListener('scroll', onScroll, { passive: true })
     return () => el.removeEventListener('scroll', onScroll)
-  }, [authenticated])
+  }, [])
 
   const goToPage = i => {
     scrollRef.current?.scrollTo({ left: i * scrollRef.current.clientWidth, behavior: 'smooth' })
@@ -131,8 +110,6 @@ function App() {
         }
       })()
     : {}
-
-  if (!authChecked || !authenticated) return null
 
   return (
     <div className="relative h-dvh overflow-hidden bg-body text-body-text" style={accentStyle}>
