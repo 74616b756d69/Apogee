@@ -33,6 +33,9 @@ const VIEW_MODES = [
 const DAY_MAX_EVENTS = true
 const TIMELINE_DAYS = 7
 
+/** 他端末での変更を取り込む間隔。サーバのキャッシュ TTL（5分）に合わせてある。 */
+const EXTERNAL_SYNC_MS = 5 * 60 * 1000
+
 /** 打ち上げ情報を、カレンダーと同じ形の読み取り専用イベントにする。 */
 function launchToEvent(launch) {
   const start = launch.net ? new Date(launch.net) : null
@@ -76,6 +79,7 @@ const CalendarWorkspace = forwardRef(function CalendarWorkspace(
   const setPref = useCalendarStore(s => s.setPref)
   const setSnapMinutes = useCalendarStore(s => s.setSnapMinutes)
   const loadRange = useCalendarStore(s => s.loadRange)
+  const syncExternal = useCalendarStore(s => s.syncExternal)
   const createEvent = useCalendarStore(s => s.createEvent)
   const updateEvent = useCalendarStore(s => s.updateEvent)
   const deleteEvent = useCalendarStore(s => s.deleteEvent)
@@ -145,6 +149,25 @@ const CalendarWorkspace = forwardRef(function CalendarWorkspace(
   const handleDatesChange = useCallback(({ start, end }) => {
     loadRange(toDateKey(start), toDateKey(end))
   }, [loadRange])
+
+  // 純正カレンダー側での追加・削除を取り込む。
+  // タブに戻った時は「たった今 iPhone で操作した」可能性が高いので必ず取り直し、
+  // 開きっぱなしの場合も一定間隔で追従する。
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') syncExternal()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('focus', onVisible)
+    const id = setInterval(() => {
+      if (document.visibilityState === 'visible') syncExternal()
+    }, EXTERNAL_SYNC_MS)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('focus', onVisible)
+      clearInterval(id)
+    }
+  }, [syncExternal])
 
   const visibleEvents = useMemo(() => {
     if (!showLaunches) return events

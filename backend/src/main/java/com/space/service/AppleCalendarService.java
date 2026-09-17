@@ -170,19 +170,39 @@ public class AppleCalendarService {
      * FullCalendar の event source が直接消費できる形。
      */
     public List<CalendarEventDto> getEventsInRange(LocalDate from, LocalDate toExclusive) {
+        return getEventsInRange(from, toExclusive, false);
+    }
+
+    /**
+     * @param refresh true ならキャッシュを捨てて CalDAV から取り直す。
+     *                他の端末（純正カレンダー）での削除・変更を即座に反映したいときに使う。
+     *                キャッシュ任せだと最大 {@code RANGE_TTL_MS} だけ消えた予定が残る。
+     */
+    public List<CalendarEventDto> getEventsInRange(LocalDate from, LocalDate toExclusive,
+                                                   boolean refresh) {
         if (!configured()) {
             log.info("Apple Calendar credentials not configured — skipping CalDAV fetch.");
             return List.of();
         }
+        if (refresh) evictRange(from, toExclusive);
         return cachedRange(from, toExclusive);
     }
 
     public List<CalendarEventDto> getTodayEvents() {
-        return getEventsForDate(LocalDate.now(JST));
+        return getTodayEvents(false);
+    }
+
+    public List<CalendarEventDto> getTodayEvents(boolean refresh) {
+        return getEventsForDate(LocalDate.now(JST), refresh);
     }
 
     public List<CalendarEventDto> getEventsForDate(LocalDate date) {
+        return getEventsForDate(date, false);
+    }
+
+    public List<CalendarEventDto> getEventsForDate(LocalDate date, boolean refresh) {
         if (!configured()) return List.of();
+        if (refresh) evictRange(date, date.plusDays(1));
         return fanOutByDate(cachedRange(date, date.plusDays(1)), date, date.plusDays(1))
                 .getOrDefault(date.toString(), List.of());
     }
@@ -366,6 +386,11 @@ public class AppleCalendarService {
 
     private void invalidateCaches() {
         rangeCache.clear();
+    }
+
+    /** 指定期間のキャッシュだけ捨てる。全体を clear すると他の画面まで取り直しになる。 */
+    private void evictRange(LocalDate from, LocalDate toExclusive) {
+        rangeCache.remove(from + "|" + toExclusive);
     }
 
     // ── コレクション探索（キャッシュ付き） ───────────────

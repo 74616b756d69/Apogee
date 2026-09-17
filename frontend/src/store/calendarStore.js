@@ -104,14 +104,14 @@ export const useCalendarStore = create((set, get) => ({
     }
   },
 
-  loadRange: async (startKey, endKey, { force = false, quiet = false } = {}) => {
+  loadRange: async (startKey, endKey, { force = false, quiet = false, refresh = false } = {}) => {
     const { loadedRange } = get()
     if (!force && loadedRange && loadedRange[0] === startKey && loadedRange[1] === endKey) return
 
     if (!quiet) set({ loading: true })
     set({ error: null })
     try {
-      const json = await api.fetchEvents(startKey, endKey)
+      const json = await api.fetchEvents(startKey, endKey, { refresh })
       set({
         events: (Array.isArray(json) ? json : []).map(normalizeEvent),
         loadedRange: [startKey, endKey],
@@ -128,6 +128,16 @@ export const useCalendarStore = create((set, get) => ({
     const range = get().loadedRange
     if (!range) return
     await get().loadRange(range[0], range[1], { force: true, quiet: true })
+  },
+
+  /**
+   * 他の端末（純正カレンダー）での変更を取り込む。
+   * サーバのキャッシュも捨てるので、iPhone で消した予定がそのまま消える。
+   */
+  syncExternal: async () => {
+    const range = get().loadedRange
+    if (!range) return
+    await get().loadRange(range[0], range[1], { force: true, quiet: true, refresh: true })
   },
 
   loadLaunches: async () => {

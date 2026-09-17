@@ -38,7 +38,8 @@ public class CalendarController {
     private final AppleCalendarService calendarService;
 
     @GetMapping("/events")
-    public List<CalendarEventDto> getEvents(@RequestParam String start, @RequestParam String end) {
+    public List<CalendarEventDto> getEvents(@RequestParam String start, @RequestParam String end,
+                                           @RequestParam(defaultValue = "false") boolean refresh) {
         LocalDate from = parseDate(start);
         LocalDate to = parseDate(end);
         if (!to.isAfter(from)) {
@@ -48,16 +49,16 @@ public class CalendarController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "range too wide (max 2 years)");
         }
         try {
-            return calendarService.getEventsInRange(from, to);
+            return calendarService.getEventsInRange(from, to, refresh);
         } catch (Exception e) {
             throw unavailable(e);
         }
     }
 
     @GetMapping("/today")
-    public List<CalendarEventDto> getToday() {
+    public List<CalendarEventDto> getToday(@RequestParam(defaultValue = "false") boolean refresh) {
         try {
-            return calendarService.getTodayEvents();
+            return calendarService.getTodayEvents(refresh);
         } catch (Exception e) {
             throw unavailable(e);
         }

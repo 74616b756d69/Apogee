@@ -6,6 +6,8 @@ import TaskSection from './TaskSection'
 const LAUNCH_PHASE_MS = 8000
 const TODAY_PHASE_MS  = 15000
 const LAUNCH_REFRESH_MS = 5 * 60 * 1000
+/** 今日の予定を取り直す間隔。純正カレンダー側の変更に追従するため。 */
+const CAL_REFRESH_MS = 5 * 60 * 1000
 
 const HERO_ANIM = 'opacity-0 animate-slide-up [animation-fill-mode:both]'
 
@@ -236,9 +238,9 @@ function TodayView({ onColorDetected, pomo, setPomo }) {
     return () => clearInterval(id)
   }, [pomo.running, launches.length])
 
-  const fetchTodayEvents = useCallback(() => {
+  const fetchTodayEvents = useCallback((refresh = false) => {
     let cancelled = false
-    fetch('/api/calendar/today', { cache: 'no-store' })
+    fetch(`/api/calendar/today${refresh ? '?refresh=true' : ''}`, { cache: 'no-store' })
       .then(r => r.ok ? r.json() : Promise.reject(new Error(String(r.status))))
       .then(json => {
         if (cancelled) return
@@ -256,9 +258,26 @@ function TodayView({ onColorDetected, pomo, setPomo }) {
 
   useEffect(() => fetchTodayEvents(), [fetchTodayEvents])
 
+  // 純正カレンダー側での削除・追加を取り込む。タブに戻った時はキャッシュを迂回する。
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') fetchTodayEvents(true)
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('focus', onVisible)
+    const id = setInterval(() => {
+      if (document.visibilityState === 'visible') fetchTodayEvents(true)
+    }, CAL_REFRESH_MS)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('focus', onVisible)
+      clearInterval(id)
+    }
+  }, [fetchTodayEvents])
+
   const retryTodayEvents = () => {
     setCalLoading(true)
-    fetchTodayEvents()
+    fetchTodayEvents(true)
   }
 
   const handleLoad = () => {

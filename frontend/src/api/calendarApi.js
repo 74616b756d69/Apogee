@@ -5,9 +5,14 @@ import { ApiError, request } from './http'
 /** 既存の呼び出し側との互換のため名前を残す。実体は共通の ApiError。 */
 export { ApiError as CalendarApiError }
 
-/** 期間内のイベント。end は排他的。 */
-export function fetchEvents(startKey, endKey) {
-  return request(`/api/calendar/events?start=${startKey}&end=${endKey}`, { cache: 'no-store' })
+/**
+ * 期間内のイベント。end は排他的。
+ * refresh を立てるとサーバ側のキャッシュを捨てて CalDAV から取り直す。
+ * 純正カレンダーでの削除・変更を即座に反映したいときに使う。
+ */
+export function fetchEvents(startKey, endKey, { refresh = false } = {}) {
+  const query = `start=${startKey}&end=${endKey}${refresh ? '&refresh=true' : ''}`
+  return request(`/api/calendar/events?${query}`, { cache: 'no-store' })
 }
 
 export function fetchCollections() {
