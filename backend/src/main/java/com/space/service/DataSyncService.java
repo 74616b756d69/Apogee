@@ -59,7 +59,8 @@ public class DataSyncService {
             calls += 1;
         }
 
-        // 画像キャッシュと古いデータの掃除は外部 API を叩かないので毎回実行してよい。
+        // 画像キャッシュと掃除は外部 API を叩かないので毎回実行してよい。
+        demoteFinishedLaunches();
         cacheImages();
         cleanupOldLaunches();
 
@@ -73,6 +74,7 @@ public class DataSyncService {
     @Scheduled(cron = "0 0 * * * *")
     public void scheduledUpcomingSync() {
         syncUpcomingLaunches();
+        demoteFinishedLaunches();
         cacheImages();
     }
 
@@ -274,6 +276,26 @@ public class DataSyncService {
             log.info("Image cache complete.");
         } catch (Exception e) {
             log.error("Image caching failed: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * 時刻を過ぎた「打ち上げ予定」を過去の打ち上げに移す。
+     *
+     * <p>API の upcoming フィードから外れた行を upcoming=false に落とす処理が
+     * どこにも無いため、打ち上げ済みのロケットが予定に残り、net 昇順の先頭を
+     * 占めてカウントダウンが消える。外部 API を使わないので毎回実行してよい。
+     */
+    private void demoteFinishedLaunches() {
+        try {
+            String now = java.time.Instant.now()
+                    .truncatedTo(java.time.temporal.ChronoUnit.SECONDS).toString();
+            int moved = launchRepository.demoteFinishedLaunches(now);
+            if (moved > 0) {
+                log.info("Moved {} finished launches out of the upcoming list.", moved);
+            }
+        } catch (Exception e) {
+            log.error("Failed to demote finished launches: {}", e.getMessage());
         }
     }
 
