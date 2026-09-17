@@ -155,6 +155,14 @@ public class AppleCalendarService {
         return !username.isBlank() && !password.isBlank();
     }
 
+    /**
+     * CalDAV 取得用のスレッドプール。{@link TaskService} も同じ CalDAV を叩くため、
+     * 共通プール（ForkJoinPool.commonPool）をブロッキング I/O で占有しないよう共有する。
+     */
+    ExecutorService caldavExecutor() {
+        return caldavExecutor;
+    }
+
     // ── 取得 API ─────────────────────────────────────
 
     /**
@@ -297,16 +305,30 @@ public class AppleCalendarService {
             return future.join();
         } catch (java.util.concurrent.CompletionException ce) {
             Throwable cause = ce.getCause() != null ? ce.getCause() : ce;
-            throw new RuntimeException("Apple Calendar fetch failed: " + cause.getMessage(), cause);
+            // 取得失敗は呼び出し側で 502 に変換したいので、型を保ったまま投げ直す。
+            if (cause instanceof CalendarUnavailableException cue) throw cue;
+            throw new CalendarUnavailableException(
+                    "Apple Calendar fetch failed: " + cause.getMessage(), cause);
         }
     }
 
     private List<CalendarEventDto> fetchRange(LocalDate from, LocalDate toExclusive) {
+        List<CollectionInfo> collections;
         try {
-            List<CollectionInfo> collections = eventCollections();
-            if (collections.isEmpty()) return List.of();
+            collections = eventCollections();
+        } catch (Exception e) {
+            // コレクション探索の失敗は「カレンダーが 1 つも無い」ではなく、
+            // 認証切れやネットワーク障害。空を返すと障害が見えなくなる。
+            throw new CalendarUnavailableException(
+                    "CalDAV collection discovery failed: " + e.getMessage(), e);
+        }
+        if (collections.isEmpty()) return List.of();
 
+        try {
             Map<String, CalendarEventDto> merged = new ConcurrentHashMap<>();
+            // 一部のカレンダーだけ落ちた場合は取れた分を見せる。全滅した場合だけ失敗として扱う。
+            java.util.concurrent.atomic.AtomicInteger failures =
+                    new java.util.concurrent.atomic.AtomicInteger();
             List<CompletableFuture<Void>> futures = collections.stream()
                     .map(info -> CompletableFuture.runAsync(() -> {
                         try {
@@ -314,6 +336,7 @@ public class AppleCalendarService {
                                 merged.putIfAbsent(e.getUid(), e);
                             }
                         } catch (Exception ex) {
+                            failures.incrementAndGet();
                             log.warn("CalDAV range query failed for collection {} ({}): {}",
                                     info.displayName(), info.url(), ex.getMessage(), ex);
                         }
@@ -321,14 +344,23 @@ public class AppleCalendarService {
                     .toList();
             CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
 
+            if (failures.get() == collections.size()) {
+                throw new CalendarUnavailableException(
+                        "All " + collections.size() + " CalDAV collections failed to respond");
+            }
+
             List<CalendarEventDto> events = new ArrayList<>(merged.values());
             events.sort(Comparator.comparing(CalendarEventDto::getStart,
                     Comparator.nullsLast(Comparator.naturalOrder())));
             return List.copyOf(events);
 
+        } catch (CalendarUnavailableException e) {
+            log.error("Apple Calendar range fetch failed: {}", e.getMessage());
+            throw e;
         } catch (Exception e) {
             log.error("Apple Calendar range fetch failed: {}", e.getMessage(), e);
-            return List.of();
+            throw new CalendarUnavailableException(
+                    "Apple Calendar range fetch failed: " + e.getMessage(), e);
         }
     }
 

@@ -3,6 +3,7 @@ package com.space.controller;
 import com.space.dto.TaskCreateDto;
 import com.space.dto.TaskDto;
 import com.space.dto.TaskUpdateDto;
+import com.space.service.CalendarUnavailableException;
 import com.space.service.TaskService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -36,7 +37,14 @@ public class TaskController {
 
     @GetMapping
     public List<TaskDto> listTasks(@RequestParam(required = false) String filter) {
-        return taskService.listTasks(filter);
+        try {
+            return taskService.listTasks(filter);
+        } catch (CalendarUnavailableException e) {
+            // 空リストで返すと「タスクが無い」と区別がつかないので、失敗は失敗として返す。
+            log.warn("Task fetch failed: {}", e.getMessage());
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                    "タスクを取得できませんでした");
+        }
     }
 
     @GetMapping("/lists")

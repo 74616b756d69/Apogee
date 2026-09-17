@@ -59,6 +59,8 @@ function FocusView({ pomo, setPomo, stats, onClose, calEvents }) {
   const [clock, setClock] = useState(() => new Date())
   const [tasks, setTasks] = useState([])
   const [tasksLoading, setTasksLoading] = useState(true)
+  // 取得失敗と「タスクが無い」を取り違えないよう別に持つ。
+  const [tasksError, setTasksError] = useState(false)
   const [currentUid, setCurrentUid] = useState(() => {
     try { return localStorage.getItem(CURRENT_TASK_KEY) } catch { return null }
   })
@@ -100,8 +102,12 @@ function FocusView({ pomo, setPomo, stats, onClose, calEvents }) {
 
   const loadTasks = () => {
     taskApi.fetchTasks('today')
-      .then(json => setTasks(Array.isArray(json) ? json : []))
-      .catch(() => setTasks([]))
+      .then(json => {
+        setTasks(Array.isArray(json) ? json : [])
+        setTasksError(false)
+      })
+      // 取得できた分は消さずに残し、失敗だけ伝える。
+      .catch(() => setTasksError(true))
       .finally(() => setTasksLoading(false))
   }
 
@@ -297,6 +303,8 @@ function FocusView({ pomo, setPomo, stats, onClose, calEvents }) {
                     </li>
                   ))}
                 </ul>
+              ) : tasksError ? (
+                <p className="text-[0.82rem] text-rose-200/80">タスクを取得できませんでした</p>
               ) : (
                 <p className="text-[0.82rem] text-white/38">未完了のタスクはありません</p>
               )}

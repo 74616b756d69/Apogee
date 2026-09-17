@@ -128,6 +128,9 @@ public class TaskService {
             }
 
             Map<String, TaskDto> merged = new ConcurrentHashMap<>();
+            // 一部のリストだけ落ちた場合は取れた分を見せ、全滅した場合だけ失敗として扱う。
+            java.util.concurrent.atomic.AtomicInteger failures =
+                    new java.util.concurrent.atomic.AtomicInteger();
             List<CompletableFuture<Void>> futures = lists.stream()
                     .map(info -> CompletableFuture.runAsync(() -> {
                         try {
@@ -135,20 +138,30 @@ public class TaskService {
                                 merged.putIfAbsent(t.getUid(), t);
                             }
                         } catch (Exception ex) {
+                            failures.incrementAndGet();
                             log.warn("VTODO query failed for list {} ({}): {}",
                                     info.displayName(), info.url(), ex.getMessage(), ex);
                         }
-                    }))
+                    }, calendarService.caldavExecutor()))
                     .toList();
             CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+
+            if (failures.get() == lists.size()) {
+                throw new CalendarUnavailableException(
+                        "All " + lists.size() + " reminder lists failed to respond");
+            }
 
             List<TaskDto> tasks = new ArrayList<>(merged.values());
             tasks.sort(TASK_ORDER);
             return List.copyOf(tasks);
 
+        } catch (CalendarUnavailableException e) {
+            log.error("Reminder fetch failed: {}", e.getMessage());
+            throw e;
         } catch (Exception e) {
+            // 取得失敗を空リストで返すと「タスクが無い」と区別がつかない。
             log.error("Reminder fetch failed: {}", e.getMessage(), e);
-            return List.of();
+            throw new CalendarUnavailableException("Reminder fetch failed: " + e.getMessage(), e);
         }
     }
 

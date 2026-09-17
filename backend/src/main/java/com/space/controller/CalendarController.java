@@ -50,7 +50,7 @@ public class CalendarController {
         try {
             return calendarService.getEventsInRange(from, to);
         } catch (Exception e) {
-            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Apple Calendar fetch failed");
+            throw unavailable(e);
         }
     }
 
@@ -59,7 +59,7 @@ public class CalendarController {
         try {
             return calendarService.getTodayEvents();
         } catch (Exception e) {
-            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Apple Calendar fetch failed");
+            throw unavailable(e);
         }
     }
 
@@ -70,19 +70,32 @@ public class CalendarController {
         } catch (ResponseStatusException e) {
             throw e;
         } catch (Exception e) {
-            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Apple Calendar fetch failed");
+            throw unavailable(e);
         }
     }
 
     @GetMapping("/month")
     public Map<String, List<CalendarEventDto>> getByMonth(
             @RequestParam int year, @RequestParam int month) {
-        return calendarService.getEventsForMonth(year, month);
+        if (month < 1 || month > 12) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid month: " + month);
+        }
+        try {
+            return calendarService.getEventsForMonth(year, month);
+        } catch (Exception e) {
+            throw unavailable(e);
+        }
     }
 
     @GetMapping("/week")
     public Map<String, List<CalendarEventDto>> getByWeek(@RequestParam String start) {
-        return calendarService.getEventsForWeek(parseDate(start));
+        try {
+            return calendarService.getEventsForWeek(parseDate(start));
+        } catch (ResponseStatusException e) {
+            throw e;
+        } catch (Exception e) {
+            throw unavailable(e);
+        }
     }
 
     @GetMapping("/collections")
@@ -122,6 +135,16 @@ public class CalendarController {
         } catch (Exception e) {
             throw toResponseStatus(e, "削除に失敗しました");
         }
+    }
+
+    /**
+     * 取得失敗は 502 で返す。空配列で返すと「予定が無い」と区別がつかず、
+     * 認証切れやネットワーク障害が空のカレンダーとして正常表示されてしまう。
+     */
+    private static ResponseStatusException unavailable(Exception e) {
+        log.warn("Apple Calendar fetch failed: {}", e.getMessage());
+        return new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                "カレンダーを取得できませんでした");
     }
 
     private static void requireStart(CalendarEventWriteDto dto) {
