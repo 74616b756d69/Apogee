@@ -35,20 +35,64 @@ public class DataSyncService {
     private final AgencyRepository agencyRepository;
     private final ImageCacheService imageCacheService;
 
-    /** アプリが完全に起動したタイミングで初回同期を実行 */
+    /**
+     * 起動時の同期。データが既にあるものは叩かない。
+     *
+     * <p>Launch Library の無料プランは 15 リクエスト/時間しかない。起動のたびに
+     * 全件同期すると、開発中の再起動やデプロイを数回繰り返しただけで枠を使い切り、
+     * 429 で同期が止まる。DB のデータは再起動をまたいで残るので、空のテーブルだけ
+     * 埋めれば十分で、鮮度は下のスケジュールが保つ。
+     */
     @EventListener(ApplicationReadyEvent.class)
     public void onApplicationReady() {
-        log.info("Application ready — starting initial data sync...");
-        syncAll();
+        int calls = 0;
+
+        if (launchRepository.count() == 0) {
+            log.info("No launches in DB — running initial launch sync.");
+            syncUpcomingLaunches();
+            syncPreviousLaunches();
+            calls += 2;
+        }
+        if (agencyRepository.count() == 0) {
+            log.info("No agencies in DB — running initial agency sync.");
+            syncAgencies();
+            calls += 1;
+        }
+
+        // 画像キャッシュと掃除は外部 API を叩かないので毎回実行してよい。
+        demoteFinishedLaunches();
+        cacheImages();
+        cleanupOldLaunches();
+
+        log.info("Initial data sync done ({} external API calls).", calls);
     }
 
-    /** 1時間ごとに自動同期 */
+    /**
+     * 打ち上げ予定は時刻変更や状態更新が頻繁なので毎時。
+     * これが定常状態で唯一の毎時リクエストになる。
+     */
     @Scheduled(cron = "0 0 * * * *")
-    public void scheduledSync() {
-        log.info("Scheduled sync triggered.");
-        syncAll();
+    public void scheduledUpcomingSync() {
+        syncUpcomingLaunches();
+        demoteFinishedLaunches();
+        cacheImages();
     }
 
+    /** 過去の打ち上げは確定済みで変化しないので 6 時間ごとで足りる。 */
+    @Scheduled(cron = "0 15 */6 * * *")
+    public void scheduledPreviousSync() {
+        syncPreviousLaunches();
+        cacheImages();
+        cleanupOldLaunches();
+    }
+
+    /** 機関情報はほぼ変化しないので 1 日 1 回。 */
+    @Scheduled(cron = "0 30 4 * * *")
+    public void scheduledAgencySync() {
+        syncAgencies();
+    }
+
+    /** 全同期。手動実行や初期構築用。 */
     public void syncAll() {
         syncUpcomingLaunches();
         syncPreviousLaunches();
@@ -232,6 +276,26 @@ public class DataSyncService {
             log.info("Image cache complete.");
         } catch (Exception e) {
             log.error("Image caching failed: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * 時刻を過ぎた「打ち上げ予定」を過去の打ち上げに移す。
+     *
+     * <p>API の upcoming フィードから外れた行を upcoming=false に落とす処理が
+     * どこにも無いため、打ち上げ済みのロケットが予定に残り、net 昇順の先頭を
+     * 占めてカウントダウンが消える。外部 API を使わないので毎回実行してよい。
+     */
+    private void demoteFinishedLaunches() {
+        try {
+            String now = java.time.Instant.now()
+                    .truncatedTo(java.time.temporal.ChronoUnit.SECONDS).toString();
+            int moved = launchRepository.demoteFinishedLaunches(now);
+            if (moved > 0) {
+                log.info("Moved {} finished launches out of the upcoming list.", moved);
+            }
+        } catch (Exception e) {
+            log.error("Failed to demote finished launches: {}", e.getMessage());
         }
     }
 

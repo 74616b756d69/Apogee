@@ -19,7 +19,7 @@ const SECTIONS = [
   { id: 'stats', icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="7" width="4" height="14" rx="1"/><rect x="17" y="3" width="4" height="18" rx="1"/></svg>,
     title: '打ち上げ統計', sub: '成功率・ロケット別ランキングなど' },
   { id: 'agencies', icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M8 14v4M12 14v4M16 14v4"/></svg>,
-    title: '宇宙機関', sub: '打ち上げを手がける機関・企業一覧' },
+    title: '研究機関', sub: '打ち上げを手がける機関・企業一覧' },
 ]
 
 const VIEWS = {
@@ -99,7 +99,7 @@ function MoreView() {
         <div className="pb-6 pt-8">
           <p className="mb-2 text-[0.62rem] font-extrabold tracking-[0.18em] text-[rgba(var(--accent),0.65)]">MORE</p>
           <h2 className="mb-1.5 text-2xl font-extrabold text-body-text">その他</h2>
-          <p className="text-[0.8rem] text-meta">発射履歴・統計データ・宇宙機関情報</p>
+          <p className="text-[0.8rem] text-meta">発射履歴・統計データ・研究機関情報</p>
         </div>
 
         <div className="mt-6 grid w-full max-w-[720px] grid-cols-2 gap-3 min-[900px]:max-w-[900px] min-[900px]:grid-cols-3 min-[900px]:gap-3.5">
