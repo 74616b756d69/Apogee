@@ -1,9 +1,13 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import LocationMapModal from './LocationMapModal'
 import LaunchLoader from './LaunchLoader'
+import TaskSection from './TaskSection'
 
 const LAUNCH_PHASE_MS = 8000
 const TODAY_PHASE_MS  = 15000
+const LAUNCH_REFRESH_MS = 5 * 60 * 1000
+/** 今日の予定を取り直す間隔。純正カレンダー側の変更に追従するため。 */
+const CAL_REFRESH_MS = 5 * 60 * 1000
 
 const HERO_ANIM = 'opacity-0 animate-slide-up [animation-fill-mode:both]'
 
@@ -60,6 +64,17 @@ function formatDateFull(dateStr) {
     year: 'numeric', month: 'long', day: 'numeric', weekday: 'long',
     timeZone: 'Asia/Tokyo',
   })
+}
+
+function formatUpdatedAt(date) {
+  if (!date) return '未取得'
+  return date.toLocaleTimeString('ja-JP', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    timeZone: 'Asia/Tokyo',
+    hour12: false,
+  }) + ' JST'
 }
 
 function CountUnit({ n, label, gold }) {
@@ -142,8 +157,11 @@ function TodayView({ onColorDetected, pomo, setPomo }) {
   const [cycleKey, setCycleKey]     = useState(0)
   const [calEvents, setCalEvents]   = useState([])
   const [calLoading, setCalLoading] = useState(true)
+  // 取得失敗を空配列で表すと「予定なし」と区別がつかないので、別に持つ。
+  const [calError, setCalError]     = useState(false)
   const [showMap, setShowMap]       = useState(false)
   const [launchKey, setLaunchKey]   = useState(0)
+  const [launchUpdatedAt, setLaunchUpdatedAt] = useState(null)
   const [clock, setClock] = useState(() => new Date())
   const imgRef     = useRef(null)
   const pageRef    = useRef(null)
@@ -156,11 +174,34 @@ function TodayView({ onColorDetected, pomo, setPomo }) {
   const selectedLaunch = launches[selectedIdx] ?? null
   const heroUrl        = selectedLaunch?.imageUrl ?? null
 
-  useEffect(() => {
-    fetch('/api/launches/upcoming')
+  const loadUpcomingLaunches = () => {
+    fetch('/api/launches/upcoming', { cache: 'no-store' })
       .then(r => r.ok ? r.json() : Promise.reject())
-      .then(json => setLaunches(json))
+      .then(json => {
+        setLaunches(Array.isArray(json) ? json : [])
+        setLaunchUpdatedAt(new Date())
+      })
       .catch(() => {})
+  }
+
+  useEffect(() => {
+    loadUpcomingLaunches()
+
+    const id = setInterval(() => {
+      loadUpcomingLaunches()
+    }, LAUNCH_REFRESH_MS)
+
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        loadUpcomingLaunches()
+      }
+    }
+
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      clearInterval(id)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
   }, [])
 
   const dataLoaded = launches.length > 0
@@ -197,15 +238,47 @@ function TodayView({ onColorDetected, pomo, setPomo }) {
     return () => clearInterval(id)
   }, [pomo.running, launches.length])
 
-  useEffect(() => {
+  const fetchTodayEvents = useCallback((refresh = false) => {
     let cancelled = false
-    fetch('/api/calendar/today')
-      .then(r => r.ok ? r.json() : Promise.reject())
-      .then(json => { if (!cancelled) setCalEvents(json) })
-      .catch(() => { if (!cancelled) setCalEvents([]) })
+    fetch(`/api/calendar/today${refresh ? '?refresh=true' : ''}`, { cache: 'no-store' })
+      .then(r => r.ok ? r.json() : Promise.reject(new Error(String(r.status))))
+      .then(json => {
+        if (cancelled) return
+        setCalEvents(Array.isArray(json) ? json : [])
+        setCalError(false)
+      })
+      .catch(() => {
+        if (cancelled) return
+        // 予定を空にはしない。前回取得できていた内容を残したまま失敗だけ伝える。
+        setCalError(true)
+      })
       .finally(() => { if (!cancelled) setCalLoading(false) })
     return () => { cancelled = true }
   }, [])
+
+  useEffect(() => fetchTodayEvents(), [fetchTodayEvents])
+
+  // 純正カレンダー側での削除・追加を取り込む。タブに戻った時はキャッシュを迂回する。
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') fetchTodayEvents(true)
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('focus', onVisible)
+    const id = setInterval(() => {
+      if (document.visibilityState === 'visible') fetchTodayEvents(true)
+    }, CAL_REFRESH_MS)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('focus', onVisible)
+      clearInterval(id)
+    }
+  }, [fetchTodayEvents])
+
+  const retryTodayEvents = () => {
+    setCalLoading(true)
+    fetchTodayEvents(true)
+  }
 
   const handleLoad = () => {
     const color = extractDominantColor(imgRef.current)
@@ -228,6 +301,9 @@ function TodayView({ onColorDetected, pomo, setPomo }) {
     <div className="flex min-h-full w-full flex-col bg-body" ref={pageRef}>
 
       <div className="relative h-dvh shrink-0 overflow-hidden">
+        <p className="absolute right-5 top-4 z-[3] text-[0.62rem] font-semibold tracking-[0.06em] text-white/55 sm:right-7 sm:top-5">
+          打ち上げデータ最終更新: {formatUpdatedAt(launchUpdatedAt)}
+        </p>
         {heroUrl ? (
           <img
             key={`bg-${launchKey}`}
@@ -288,6 +364,16 @@ function TodayView({ onColorDetected, pomo, setPomo }) {
           </h1>
           {calLoading ? (
             <LaunchLoader size="small" label="" />
+          ) : calError && calEvents.length === 0 ? (
+            <div className="mt-3.5 md:mr-[216px]">
+              <p className="text-[0.84rem] text-rose-200/85">予定を取得できませんでした</p>
+              <button
+                className="mt-1.5 cursor-pointer rounded-lg border border-white/20 px-2.5 py-1 text-[0.72rem] font-bold text-white/70 transition-colors hover:border-white/40 hover:text-white"
+                onClick={retryTodayEvents}
+              >
+                再試行
+              </button>
+            </div>
           ) : calEvents.length > 0 ? (
             <ul className="mt-4 flex list-none flex-col gap-2.5 border-t border-white/14 pt-3.5 md:mr-[216px]">
               {calEvents.map((e, i) => (
@@ -298,6 +384,9 @@ function TodayView({ onColorDetected, pomo, setPomo }) {
                   <span className="text-[0.9rem] font-semibold leading-snug text-white">{e.title}</span>
                 </li>
               ))}
+              {calError && (
+                <li className="text-[0.7rem] text-rose-200/70">最新の予定を取得できませんでした（表示は前回取得時点）</li>
+              )}
             </ul>
           ) : (
             <p className="mt-3.5 text-[0.84rem] text-white/42 md:mr-[216px]">今日の予定はありません</p>
@@ -355,6 +444,10 @@ function TodayView({ onColorDetected, pomo, setPomo }) {
             </div>
           </div>
         )}
+      </div>
+
+      <div className={`bg-[#06090f] ${launches.length > 1 ? '' : 'pb-[calc(72px+env(safe-area-inset-bottom))]'}`}>
+        <TaskSection />
       </div>
 
       {launches.length > 1 && (

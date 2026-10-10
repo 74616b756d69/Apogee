@@ -26,7 +26,7 @@ function AgencyView() {
     <div className="mx-auto w-full max-w-[1200px] px-4 py-6 pb-[calc(56px+env(safe-area-inset-bottom))] sm:px-4">
       <div className="mb-6">
         <p className="mb-2 text-[0.65rem] font-extrabold uppercase tracking-[0.2em] text-[#7ab8ff]">ORGANIZATIONS</p>
-        <h2 className="text-2xl font-semibold text-white">宇宙機関</h2>
+        <h2 className="text-2xl font-semibold text-white">研究機関</h2>
         <p className="mt-2 text-sm text-[#7a93b0]">打ち上げを手がける機関・企業一覧</p>
       </div>
 

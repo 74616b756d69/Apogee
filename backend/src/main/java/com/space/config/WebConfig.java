@@ -28,5 +28,10 @@ public class WebConfig implements WebMvcConfigurer {
         registry.addResourceHandler("/space-images/**")
                 .addResourceLocations(location)
                 .setCachePeriod(604800); // ブラウザに1週間キャッシュさせる
+
+        // SPA fallback for public booking pages
+        registry.addResourceHandler("/booking/**")
+                .addResourceLocations("classpath:/static/")
+                .resourceChain(false);
     }
 }

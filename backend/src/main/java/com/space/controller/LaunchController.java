@@ -29,7 +29,11 @@ public class LaunchController {
 
     @GetMapping("/upcoming")
     public List<Launch> getUpcomingLaunches() {
-        return launchRepository.findByUpcomingTrueOrderByNetAsc();
+        return launchRepository.findUpcomingFrom(nowIso());
+    }
+
+    private static String nowIso() {
+        return java.time.Instant.now().truncatedTo(java.time.temporal.ChronoUnit.SECONDS).toString();
     }
 
     @GetMapping("/previous")
